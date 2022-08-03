@@ -18,6 +18,114 @@ const MAX_FON_ID: FonId = 127;
 
 type FonId = usize;
 
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub struct FonSet {
+    bits: u128,
+}
+
+impl FonSet {
+    pub const NULL: FonSet = FonSet { bits: 0 };
+
+    pub fn contains(&self, id: FonId) -> bool {
+        self.bits & (1 << id) != 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.bits.count_ones() as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bits == 0
+    }
+
+    pub fn iter(&self) -> FonSetIter {
+        FonSetIter {
+            fonset: self.clone(),
+            index: 0,
+        }
+    }
+}
+
+impl From<FonId> for FonSet {
+    fn from(id: FonId) -> Self {
+        FonSet { bits: 1 << id }
+    }
+}
+
+impl std::ops::BitOr for FonSet {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self {
+            bits: self.bits | rhs.bits,
+        }
+    }
+}
+
+impl std::ops::BitOrAssign for FonSet {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.bits |= rhs.bits;
+    }
+}
+
+impl std::ops::BitAnd for FonSet {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self {
+            bits: self.bits & rhs.bits,
+        }
+    }
+}
+
+impl std::ops::BitAndAssign for FonSet {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.bits &= rhs.bits;
+    }
+}
+
+pub struct FonSetIter {
+    fonset: FonSet,
+    index: usize,
+}
+
+impl Iterator for FonSetIter {
+    type Item = FonId;
+    fn next(&mut self) -> Option<FonId> {
+        if self.fonset.is_empty() {
+            None
+        } else {
+            // skip all zeros, get nonzero index, then move one past
+            let zeros = self.fonset.bits.trailing_zeros();
+            self.index += zeros as usize;
+            let item = Some(self.index);
+            self.fonset.bits >>= zeros;
+            self.fonset.bits >>= 1;
+            self.index += 1;
+            item
+        }
+    }
+}
+
+impl IntoIterator for FonSet {
+    type Item = FonId;
+    type IntoIter = FonSetIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl FromIterator<FonId> for FonSet {
+    fn from_iter<I: IntoIterator<Item = FonId>>(iter: I) -> Self {
+        let mut s = FonSet::NULL;
+        for i in iter {
+            s |= i.into();
+        }
+        s
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FonRegistry {
     fons: Vec<char>,
@@ -103,4 +211,80 @@ fn test_too_many_registries() -> Result<()> {
     }
     assert_eq!(reg.add('\0'), Err(NoMoreFonIds));
     Ok(())
+}
+
+#[test]
+fn test_fonset_null() {
+    let s = FonSet::NULL;
+    assert!(s.is_empty());
+    assert_eq!(s.len(), 0);
+    for i in 0..=MAX_FON_ID {
+        assert!(!s.contains(i))
+    }
+}
+
+#[test]
+fn test_fonset_default() {
+    let s: FonSet = Default::default();
+    assert_eq!(s, FonSet::NULL);
+}
+
+#[test]
+fn test_fonset_from_one_contains_it() {
+    for i in 0..=MAX_FON_ID {
+        assert!(FonSet::from(i).contains(i));
+    }
+}
+
+#[test]
+fn test_fonset_from_one_only_contains_it() {
+    for i in 0..=MAX_FON_ID {
+        let s = FonSet::from(i);
+        assert_eq!(s.len(), 1);
+        assert!(!s.is_empty());
+        for j in 0..=MAX_FON_ID {
+            if i != j {
+                assert!(!s.contains(j));
+            }
+        }
+    }
+}
+
+#[test]
+fn test_fonset_add_with_oreq() {
+    let mut s = FonSet::NULL;
+    s |= 3.into();
+    s |= 17.into();
+    s |= 1.into();
+    s |= 0.into();
+    s |= 4.into();
+    assert_eq!(s.len(), 5);
+}
+
+#[test]
+fn test_fonset_from_to_iter() {
+    use std::collections::HashSet;
+    let hs: HashSet<FonId> = [50, 7, 12, 4].into();
+    let fs: FonSet = hs.iter().cloned().collect();
+    let fshs: HashSet<FonId> = fs.iter().collect();
+    assert_eq!(fshs, hs);
+    assert!(fs.contains(12));
+}
+
+#[test]
+fn test_fonset_iter() {
+    for i in 0..=MAX_FON_ID {
+        let v: Vec<FonId> = FonSet::from(i).iter().collect();
+        assert_eq!(v, vec![i]);
+    }
+}
+
+#[test]
+fn test_fonset_for_loop() {
+    let s1: FonSet = [0, 55, 3, 11, 8].into_iter().collect();
+    let mut s2: FonSet = FonSet::NULL;
+    for i in s1 {
+        s2 |= i.into();
+    }
+    assert_eq!(s2, s1);
 }
