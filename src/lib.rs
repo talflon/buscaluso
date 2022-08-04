@@ -84,6 +84,22 @@ impl std::ops::BitAndAssign for FonSet {
     }
 }
 
+impl std::ops::Sub for FonSet {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            bits: self.bits & !rhs.bits,
+        }
+    }
+}
+
+impl std::ops::SubAssign for FonSet {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.bits &= !rhs.bits;
+    }
+}
+
 pub struct FonSetIter {
     fonset: FonSet,
     index: usize,
@@ -259,6 +275,20 @@ fn test_fonset_add_with_oreq() {
     s |= 0.into();
     s |= 4.into();
     assert_eq!(s.len(), 5);
+}
+
+#[test]
+fn test_fonset_subtract() {
+    let s: FonSet = [100, 99].into_iter().collect();
+    assert_eq!(s - FonSet::from(99), FonSet::from(100));
+}
+
+#[test]
+fn test_oreq_subeq() {
+    let mut s = FonSet::NULL;
+    s |= 77.into();
+    s -= 77.into();
+    assert!(!s.contains(77));
 }
 
 #[test]
