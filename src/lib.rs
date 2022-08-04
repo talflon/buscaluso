@@ -44,6 +44,14 @@ impl FonSet {
             index: 0,
         }
     }
+
+    pub fn fons(&self, reg: &FonRegistry) -> Result<Vec<char>> {
+        let mut result: Vec<char> = Vec::new();
+        for i in self.iter() {
+            result.push(reg.get_fon(i)?);
+        }
+        Ok(result)
+    }
 }
 
 impl From<FonId> for FonSet {
@@ -317,4 +325,17 @@ fn test_fonset_for_loop() {
         s2 |= i.into();
     }
     assert_eq!(s2, s1);
+}
+
+#[test]
+fn test_fonset_fons() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let mut s = FonSet::NULL;
+    let chars = vec!['$', 'q', 'A', 'ç'];
+    for &c in chars.iter() {
+        s |= reg.add(c)?.into();
+    }
+    assert_eq!(s.fons(&reg)?, chars);
+    assert_eq!(FonSet::NULL.fons(&reg)?, vec![]);
+    Ok(())
 }
