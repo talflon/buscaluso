@@ -70,9 +70,23 @@ impl std::ops::BitOr for FonSet {
     }
 }
 
+impl std::ops::BitOr<FonId> for FonSet {
+    type Output = Self;
+
+    fn bitor(self, rhs: FonId) -> Self::Output {
+        self | FonSet::from(rhs)
+    }
+}
+
 impl std::ops::BitOrAssign for FonSet {
     fn bitor_assign(&mut self, rhs: Self) {
         self.bits |= rhs.bits;
+    }
+}
+
+impl std::ops::BitOrAssign<FonId> for FonSet {
+    fn bitor_assign(&mut self, rhs: FonId) {
+        *self |= FonSet::from(rhs)
     }
 }
 
@@ -102,9 +116,23 @@ impl std::ops::Sub for FonSet {
     }
 }
 
+impl std::ops::Sub<FonId> for FonSet {
+    type Output = Self;
+
+    fn sub(self, rhs: FonId) -> Self::Output {
+        self - FonSet::from(rhs)
+    }
+}
+
 impl std::ops::SubAssign for FonSet {
     fn sub_assign(&mut self, rhs: Self) {
         self.bits &= !rhs.bits;
+    }
+}
+
+impl std::ops::SubAssign<FonId> for FonSet {
+    fn sub_assign(&mut self, rhs: FonId) {
+        *self -= FonSet::from(rhs)
     }
 }
 
@@ -144,7 +172,7 @@ impl FromIterator<FonId> for FonSet {
     fn from_iter<I: IntoIterator<Item = FonId>>(iter: I) -> Self {
         let mut s = FonSet::NULL;
         for i in iter {
-            s |= i.into();
+            s |= i;
         }
         s
     }
@@ -277,25 +305,25 @@ fn test_fonset_from_one_only_contains_it() {
 #[test]
 fn test_fonset_add_with_oreq() {
     let mut s = FonSet::NULL;
-    s |= 3.into();
-    s |= 17.into();
-    s |= 1.into();
-    s |= 0.into();
-    s |= 4.into();
+    s |= 3;
+    s |= 17;
+    s |= 1;
+    s |= 0;
+    s |= 4;
     assert_eq!(s.len(), 5);
 }
 
 #[test]
 fn test_fonset_subtract() {
     let s: FonSet = [100, 99].into_iter().collect();
-    assert_eq!(s - FonSet::from(99), FonSet::from(100));
+    assert_eq!(s - 99, FonSet::from(100));
 }
 
 #[test]
 fn test_oreq_subeq() {
     let mut s = FonSet::NULL;
-    s |= 77.into();
-    s -= 77.into();
+    s |= 77;
+    s -= 77;
     assert!(!s.contains(77));
 }
 
@@ -322,7 +350,7 @@ fn test_fonset_for_loop() {
     let s1: FonSet = [0, 55, 3, 11, 8].into_iter().collect();
     let mut s2: FonSet = FonSet::NULL;
     for i in s1 {
-        s2 |= i.into();
+        s2 |= i;
     }
     assert_eq!(s2, s1);
 }
@@ -333,7 +361,7 @@ fn test_fonset_fons() -> Result<()> {
     let mut s = FonSet::NULL;
     let chars = vec!['$', 'q', 'A', 'ç'];
     for &c in chars.iter() {
-        s |= reg.add(c)?.into();
+        s |= reg.add(c)?;
     }
     assert_eq!(s.fons(&reg)?, chars);
     assert_eq!(FonSet::NULL.fons(&reg)?, vec![]);
