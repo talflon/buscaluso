@@ -16,7 +16,7 @@ use FonError::*;
 
 const MAX_FON_ID: FonId = 127;
 
-type FonId = usize;
+type FonId = u8;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct FonSet {
@@ -160,7 +160,7 @@ impl Iterator for FonSetIter {
             // skip all zeros, get nonzero index, then move one past
             let zeros = self.fonset.bits.trailing_zeros();
             self.index += zeros as usize;
-            let item = Some(self.index);
+            let item = Some(self.index as FonId);
             self.fonset.bits >>= zeros;
             self.fonset.bits >>= 1;
             self.index += 1;
@@ -249,7 +249,7 @@ impl FonRegistry {
     }
 
     pub fn try_get_id(&self, fon: char) -> Option<FonId> {
-        self.fons.iter().position(|&f| f == fon)
+        self.fons.iter().position(|&f| f == fon).map(|i| i as FonId)
     }
 
     pub fn get_id(&self, fon: char) -> Result<FonId> {
@@ -257,7 +257,7 @@ impl FonRegistry {
     }
 
     pub fn try_get_fon(&self, id: FonId) -> Option<char> {
-        self.fons.get(id).cloned()
+        self.fons.get(id as usize).cloned()
     }
 
     pub fn get_fon(&self, id: FonId) -> Result<char> {
