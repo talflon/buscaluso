@@ -204,15 +204,19 @@ impl FonSetSeq {
         self.0.iter().copied()
     }
 
-    pub fn matched(&self, pattern: &FonSetSeq, index: usize) -> Option<FonSetSeq> {
-        let mut result = self.clone();
-        for (i, s) in pattern.iter().enumerate() {
-            result.0[index + i] &= s;
-        }
-        if result.is_empty() {
+    pub fn match_at(&self, seq: &FonSetSeq, index: usize) -> Option<FonSetSeq> {
+        if index + self.len() > seq.len() {
             None
         } else {
-            Some(result)
+            let mut result = seq.clone();
+            for (i, s) in self.iter().enumerate() {
+                result.0[index + i] &= s;
+            }
+            if result.is_empty() {
+                None
+            } else {
+                Some(result)
+            }
         }
     }
 }
@@ -220,6 +224,12 @@ impl FonSetSeq {
 impl From<Vec<FonSet>> for FonSetSeq {
     fn from(v: Vec<FonSet>) -> FonSetSeq {
         FonSetSeq(v)
+    }
+}
+
+impl<const N: usize> From<[FonSet; N]> for FonSetSeq {
+    fn from(a: [FonSet; N]) -> FonSetSeq {
+        FonSetSeq(Vec::from(a))
     }
 }
 
@@ -415,35 +425,41 @@ fn test_fonset_fons() -> Result<()> {
 
 #[test]
 fn test_fonsetseq_empty() {
-    assert!(FonSetSeq::from(vec![]).is_empty());
-    assert!(FonSetSeq::from(vec![FonSet::NULL]).is_empty());
-    assert!(FonSetSeq::from(vec![FonSet::NULL, FonSet::NULL]).is_empty());
-    assert!(FonSetSeq::from(vec![FonSet::NULL, FonSet::from(3)]).is_empty());
-    assert!(FonSetSeq::from(vec![FonSet::from(2), FonSet::NULL]).is_empty());
-    assert!(!FonSetSeq::from(vec![FonSet::from(2), FonSet::from(3)]).is_empty());
+    assert!(FonSetSeq::from([]).is_empty());
+    assert!(FonSetSeq::from([FonSet::NULL]).is_empty());
+    assert!(FonSetSeq::from([FonSet::NULL, FonSet::NULL]).is_empty());
+    assert!(FonSetSeq::from([FonSet::NULL, FonSet::from(3)]).is_empty());
+    assert!(FonSetSeq::from([FonSet::from(2), FonSet::NULL]).is_empty());
+    assert!(!FonSetSeq::from([FonSet::from(2), FonSet::from(3)]).is_empty());
 }
 
 #[test]
-fn test_fonsetseq_match() {
-    let seq1 = FonSetSeq::from(vec![FonSet::from([2, 4]), FonSet::from([1, 2, 3])]);
-    let seq2 = FonSetSeq::from(vec![FonSet::from([2, 5])]);
+fn test_fonsetseq_match_at_in_bounds() {
+    let seq1 = FonSetSeq::from([FonSet::from([2, 4]), FonSet::from([1, 2, 3])]);
+    let seq2 = FonSetSeq::from([FonSet::from([2, 5])]);
     assert_eq!(
-        seq1.matched(&seq2, 0),
-        Some(FonSetSeq::from(vec![
+        seq2.match_at(&seq1, 0),
+        Some(FonSetSeq::from([
             FonSet::from(2),
-            FonSet::from(1) | 2 | 3
+            FonSet::from([1, 2, 3])
         ]))
     );
     assert_eq!(
-        seq1.matched(&seq2, 1),
-        Some(FonSetSeq::from(vec![FonSet::from([2, 4]), FonSet::from(2)]))
+        seq2.match_at(&seq1, 1),
+        Some(FonSetSeq::from([FonSet::from([2, 4]), FonSet::from(2)]))
     );
     assert_eq!(
-        seq1.matched(&FonSetSeq::from(vec![FonSet::from(81)]), 0),
+        FonSetSeq::from([FonSet::from(81)]).match_at(&seq1, 0),
         None
     );
     assert_eq!(
-        seq1.matched(&FonSetSeq::from(vec![FonSet::from(81)]), 1),
+        FonSetSeq::from([FonSet::from(81)]).match_at(&seq1, 1),
         None
     );
+}
+
+#[test]
+fn test_fonsetseq_match_at_out_of_bounds() {
+    assert_eq!(FonSetSeq::from([]).match_at(&FonSetSeq::from([]), 1), None);
+    assert_eq!(FonSetSeq::from([FonSet::from([32, 0])]).match_at(&FonSetSeq::from([FonSet::from([90, 0, 1])]), 1), None);
 }
