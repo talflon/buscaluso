@@ -275,191 +275,190 @@ impl FonRegistry {
     }
 }
 
-#[test]
-fn test_fon_registry_empty() {
-    let reg = FonRegistry::new();
-    for c in ['q', 'é', '\0'] {
-        assert_eq!(reg.get_id(c), Err(NoSuchFon(c)));
-    }
-    for i in [0, 1, 2, 35, MAX_FON_ID] {
-        assert_eq!(reg.get_fon(i), Err(NoSuchFonId(i)));
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_fon_registry_add() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    for c in ['Z', 'Ç'] {
-        reg.add(c)?;
-        assert_eq!(reg.get_fon(reg.get_id(c)?)?, c);
+    #[test]
+    fn test_fon_registry_empty() {
+        let reg = FonRegistry::new();
+        for c in ['q', 'é', '\0'] {
+            assert_eq!(reg.get_id(c), Err(NoSuchFon(c)));
+        }
+        for i in [0, 1, 2, 35, MAX_FON_ID] {
+            assert_eq!(reg.get_fon(i), Err(NoSuchFonId(i)));
+        }
     }
-    Ok(())
-}
 
-#[test]
-fn test_fon_registry_add_same() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    let c = '$';
-    let id = reg.add(c)?;
-    for _ in 0..10000 {
-        assert_eq!(reg.add(c)?, id);
+    #[test]
+    fn test_fon_registry_add() -> Result<()> {
+        let mut reg = FonRegistry::new();
+        for c in ['Z', 'Ç'] {
+            reg.add(c)?;
+            assert_eq!(reg.get_fon(reg.get_id(c)?)?, c);
+        }
+        Ok(())
     }
-    Ok(())
-}
 
-#[test]
-fn test_too_many_registries() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    for c in (1..1000000u32)
-        .flat_map(char::from_u32)
-        .take((MAX_FON_ID as usize) + 1)
-    {
-        reg.add(c)?;
+    #[test]
+    fn test_fon_registry_add_same() -> Result<()> {
+        let mut reg = FonRegistry::new();
+        let c = '$';
+        let id = reg.add(c)?;
+        for _ in 0..10000 {
+            assert_eq!(reg.add(c)?, id);
+        }
+        Ok(())
     }
-    assert_eq!(reg.add('\0'), Err(NoMoreFonIds));
-    Ok(())
-}
 
-#[test]
-fn test_fonset_null() {
-    let s = FonSet::NULL;
-    assert!(s.is_empty());
-    assert_eq!(s.len(), 0);
-    for i in 0..=MAX_FON_ID {
-        assert!(!s.contains(i))
+    #[test]
+    fn test_too_many_registries() -> Result<()> {
+        let mut reg = FonRegistry::new();
+        for c in (1..)
+            .flat_map(char::from_u32)
+            .take((MAX_FON_ID as usize) + 1)
+        {
+            reg.add(c)?;
+        }
+        assert_eq!(reg.add('\0'), Err(NoMoreFonIds));
+        Ok(())
     }
-}
 
-#[test]
-fn test_fonset_default() {
-    let s: FonSet = Default::default();
-    assert_eq!(s, FonSet::NULL);
-}
-
-#[test]
-fn test_fonset_from_one_contains_it() {
-    for i in 0..=MAX_FON_ID {
-        assert!(FonSet::from(i).contains(i));
+    #[test]
+    fn test_fonset_null() {
+        let s = FonSet::NULL;
+        assert!(s.is_empty());
+        assert_eq!(s.len(), 0);
+        for i in 0..=MAX_FON_ID {
+            assert!(!s.contains(i))
+        }
     }
-}
 
-#[test]
-fn test_fonset_from_one_only_contains_it() {
-    for i in 0..=MAX_FON_ID {
-        let s = FonSet::from(i);
-        assert_eq!(s.len(), 1);
-        assert!(!s.is_empty());
-        for j in 0..=MAX_FON_ID {
-            if i != j {
-                assert!(!s.contains(j));
+    #[test]
+    fn test_fonset_default() {
+        let s: FonSet = Default::default();
+        assert_eq!(s, FonSet::NULL);
+    }
+
+    #[test]
+    fn test_fonset_from_one_contains_it() {
+        for i in 0..=MAX_FON_ID {
+            assert!(FonSet::from(i).contains(i));
+        }
+    }
+
+    #[test]
+    fn test_fonset_from_one_only_contains_it() {
+        for i in 0..=MAX_FON_ID {
+            let s = FonSet::from(i);
+            assert_eq!(s.len(), 1);
+            assert!(!s.is_empty());
+            for j in 0..=MAX_FON_ID {
+                if i != j {
+                    assert!(!s.contains(j));
+                }
             }
         }
     }
-}
 
-#[test]
-fn test_fonset_add_with_oreq() {
-    let mut s = FonSet::NULL;
-    s |= 3;
-    s |= 17;
-    s |= 1;
-    s |= 0;
-    s |= 4;
-    assert_eq!(s.len(), 5);
-}
-
-#[test]
-fn test_fonset_subtract() {
-    let s = FonSet::from([100, 99]);
-    assert_eq!(s - 99, FonSet::from(100));
-}
-
-#[test]
-fn test_oreq_subeq() {
-    let mut s = FonSet::NULL;
-    s |= 77;
-    s -= 77;
-    assert!(!s.contains(77));
-}
-
-#[test]
-fn test_fonset_from_to_iter() {
-    use std::collections::HashSet;
-    let hs: HashSet<FonId> = [50, 7, 12, 4].into();
-    let fs: FonSet = hs.iter().cloned().collect();
-    let fshs: HashSet<FonId> = fs.iter().collect();
-    assert_eq!(fshs, hs);
-    assert!(fs.contains(12));
-}
-
-#[test]
-fn test_fonset_iter() {
-    for i in 0..=MAX_FON_ID {
-        let v: Vec<FonId> = FonSet::from(i).iter().collect();
-        assert_eq!(v, vec![i]);
+    #[test]
+    fn test_fonset_add_with_oreq() {
+        let mut s = FonSet::NULL;
+        s |= 3;
+        s |= 17;
+        s |= 1;
+        s |= 0;
+        s |= 4;
+        assert_eq!(s.len(), 5);
     }
-}
 
-#[test]
-fn test_fonset_for_loop() {
-    let s1 = FonSet::from([0, 55, 3, 11, 8]);
-    let mut s2: FonSet = FonSet::NULL;
-    for i in s1 {
-        s2 |= i;
+    #[test]
+    fn test_fonset_subtract() {
+        let s = FonSet::from([100, 99]);
+        assert_eq!(s - 99, FonSet::from(100));
     }
-    assert_eq!(s2, s1);
-}
 
-#[test]
-fn test_fonset_fons() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    let mut s = FonSet::NULL;
-    let chars = vec!['$', 'q', 'A', 'ç'];
-    for &c in chars.iter() {
-        s |= reg.add(c)?;
+    #[test]
+    fn test_oreq_subeq() {
+        let mut s = FonSet::NULL;
+        s |= 77;
+        s -= 77;
+        assert!(!s.contains(77));
     }
-    assert_eq!(s.fons(&reg)?, chars);
-    assert_eq!(FonSet::NULL.fons(&reg)?, vec![]);
-    Ok(())
-}
 
-#[test]
-fn test_fonsetseq_empty() {
-    assert!(FonSetSeq::from([]).is_empty());
-    assert!(FonSetSeq::from([FonSet::NULL]).is_empty());
-    assert!(FonSetSeq::from([FonSet::NULL, FonSet::NULL]).is_empty());
-    assert!(FonSetSeq::from([FonSet::NULL, FonSet::from(3)]).is_empty());
-    assert!(FonSetSeq::from([FonSet::from(2), FonSet::NULL]).is_empty());
-    assert!(!FonSetSeq::from([FonSet::from(2), FonSet::from(3)]).is_empty());
-}
+    #[test]
+    fn test_fonset_from_to_iter() {
+        use std::collections::HashSet;
+        let hs: HashSet<FonId> = [50, 7, 12, 4].into();
+        let fs: FonSet = hs.iter().cloned().collect();
+        let fshs: HashSet<FonId> = fs.iter().collect();
+        assert_eq!(fshs, hs);
+        assert!(fs.contains(12));
+    }
 
-#[test]
-fn test_fonsetseq_match_at_in_bounds() {
-    let seq1 = FonSetSeq::from([FonSet::from([2, 4]), FonSet::from([1, 2, 3])]);
-    let seq2 = FonSetSeq::from([FonSet::from([2, 5])]);
-    assert_eq!(
-        seq2.match_at(&seq1, 0),
-        Some(FonSetSeq::from([
-            FonSet::from(2),
-            FonSet::from([1, 2, 3])
-        ]))
-    );
-    assert_eq!(
-        seq2.match_at(&seq1, 1),
-        Some(FonSetSeq::from([FonSet::from([2, 4]), FonSet::from(2)]))
-    );
-    assert_eq!(
-        FonSetSeq::from([FonSet::from(81)]).match_at(&seq1, 0),
-        None
-    );
-    assert_eq!(
-        FonSetSeq::from([FonSet::from(81)]).match_at(&seq1, 1),
-        None
-    );
-}
+    #[test]
+    fn test_fonset_iter() {
+        for i in 0..=MAX_FON_ID {
+            let v: Vec<FonId> = FonSet::from(i).iter().collect();
+            assert_eq!(v, vec![i]);
+        }
+    }
 
-#[test]
-fn test_fonsetseq_match_at_out_of_bounds() {
-    assert_eq!(FonSetSeq::from([]).match_at(&FonSetSeq::from([]), 1), None);
-    assert_eq!(FonSetSeq::from([FonSet::from([32, 0])]).match_at(&FonSetSeq::from([FonSet::from([90, 0, 1])]), 1), None);
+    #[test]
+    fn test_fonset_for_loop() {
+        let s1 = FonSet::from([0, 55, 3, 11, 8]);
+        let mut s2: FonSet = FonSet::NULL;
+        for i in s1 {
+            s2 |= i;
+        }
+        assert_eq!(s2, s1);
+    }
+
+    #[test]
+    fn test_fonset_fons() -> Result<()> {
+        let mut reg = FonRegistry::new();
+        let mut s = FonSet::NULL;
+        let chars = vec!['$', 'q', 'A', 'ç'];
+        for &c in chars.iter() {
+            s |= reg.add(c)?;
+        }
+        assert_eq!(s.fons(&reg)?, chars);
+        assert_eq!(FonSet::NULL.fons(&reg)?, vec![]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_fonsetseq_empty() {
+        assert!(FonSetSeq::from([]).is_empty());
+        assert!(FonSetSeq::from([FonSet::NULL]).is_empty());
+        assert!(FonSetSeq::from([FonSet::NULL, FonSet::NULL]).is_empty());
+        assert!(FonSetSeq::from([FonSet::NULL, FonSet::from(3)]).is_empty());
+        assert!(FonSetSeq::from([2.into(), FonSet::NULL]).is_empty());
+        assert!(!FonSetSeq::from([2.into(), 3.into()]).is_empty());
+    }
+
+    #[test]
+    fn test_fonsetseq_match_at_in_bounds() {
+        let seq1 = FonSetSeq::from([[2, 4].into(), [1, 2, 3].into()]);
+        let seq2 = FonSetSeq::from([[2, 5].into()]);
+        assert_eq!(
+            seq2.match_at(&seq1, 0),
+            Some(FonSetSeq::from([2.into(), [1, 2, 3].into()]))
+        );
+        assert_eq!(
+            seq2.match_at(&seq1, 1),
+            Some(FonSetSeq::from([[2, 4].into(), 2.into()]))
+        );
+        assert_eq!(FonSetSeq::from([81.into()]).match_at(&seq1, 0), None);
+        assert_eq!(FonSetSeq::from([81.into()]).match_at(&seq1, 1), None);
+    }
+
+    #[test]
+    fn test_fonsetseq_match_at_out_of_bounds() {
+        assert_eq!(FonSetSeq::from([]).match_at(&FonSetSeq::from([]), 1), None);
+        assert_eq!(
+            FonSetSeq::from([[32, 0].into()]).match_at(&FonSetSeq::from([[90, 0, 1].into()]), 1),
+            None
+        );
+    }
 }
