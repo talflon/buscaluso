@@ -1,8 +1,11 @@
+use std::io;
+use std::io::BufRead;
+
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, FonError>;
 
-#[derive(Error, Clone, PartialEq, Eq, Debug)]
+#[derive(Error, Debug)]
 pub enum FonError {
     #[error("No such fon {0:?}")]
     NoSuchFon(char),
@@ -10,6 +13,11 @@ pub enum FonError {
     NoMoreFonIds,
     #[error("No such fon id {0}")]
     NoSuchFonId(FonId),
+    #[error("IO error {source:?}")]
+    Io {
+        #[from]
+        source: io::Error,
+    },
 }
 
 use FonError::*;
@@ -275,6 +283,42 @@ impl FonRegistry {
     }
 }
 
+type Cost = i32;
+
+pub struct Engine {
+    fon_registry: FonRegistry,
+}
+
+impl Engine {
+    pub fn new() -> Engine {
+        Engine {
+            fon_registry: FonRegistry::new(),
+        }
+    }
+
+    pub fn load_rules<R: BufRead>(&mut self, input: R) -> Result<()> {
+        for line in input.lines() {
+            let _s = line?;
+        }
+        Ok(())
+    }
+
+    pub fn add_to_dictionary(&mut self, word: &str) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn load_dictionary<R: BufRead>(&mut self, input: R) -> Result<()> {
+        for line in input.lines() {
+            self.add_to_dictionary(&line?.trim())?;
+        }
+        Ok(())
+    }
+
+    pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
+        std::iter::empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,10 +327,10 @@ mod tests {
     fn test_fon_registry_empty() {
         let reg = FonRegistry::new();
         for c in ['q', 'é', '\0'] {
-            assert_eq!(reg.get_id(c), Err(NoSuchFon(c)));
+            assert!(matches!(reg.get_id(c), Err(NoSuchFon(c_)) if c_ == c));
         }
         for i in [0, 1, 2, 35, MAX_FON_ID] {
-            assert_eq!(reg.get_fon(i), Err(NoSuchFonId(i)));
+            assert!(matches!(reg.get_fon(i), Err(NoSuchFonId(i_)) if i_ == i));
         }
     }
 
@@ -320,7 +364,7 @@ mod tests {
         {
             reg.add(c)?;
         }
-        assert_eq!(reg.add('\0'), Err(NoMoreFonIds));
+        assert!(matches!(reg.add('\0'), Err(NoMoreFonIds)));
         Ok(())
     }
 
