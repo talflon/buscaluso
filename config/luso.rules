@@ -1,0 +1,158 @@
+; aliases
+; groups for all variants of a vowel
+A = [a á â ã]
+E = [e é ê ẽ]
+I = [i ĩ]
+O = [o ó ô õ]
+U = [u ũ]
+V = [A E I O U ɨ]  ; all vowels
+Vn = [ã ẽ ĩ õ ũ]  ; nasal vowels
+C = [b d f g k l m n p q r s t v x z ç š ž λ]  ; all consonants
+Cs = [b d g k p q t]  ; stops
+Cv = [b d g v z ž]  ; voiced
+Cu = [f k p q t ç š]  ; unvoiced
+Cn = [m n ñ]  ; nasal consonants
+
+; normalization
+l h > λ
+n h > ñ
+c h > š
+p h > f
+h > 
+[ú ù û w] > u
+[î í ì ï y] > i
+ã o > ã u
+õ e > õ i
+ã e > ã i
+à > á
+è > é
+ò > ó
+s s > ç
+c i > ç i
+c e > ç e
+c c > k ç
+c > k
+g i > ž i
+g e > ž e
+j > ž
+b b > b
+d d > d
+f f > f
+k k > k
+l l > l
+m m > m
+n n > n
+p p > p
+q q > q
+r r > r
+t t > t
+v v > v
+- > []
+
+
+; mutations
+
+; basic vowel
+1: a > [á â]
+1: e > [é ê]
+1: o > [ô ó]
+1: o u > ô
+1: o > u | _
+1: e > ɨ | _
+10: ɨ > []
+20: i > ɨ
+30: u > ɨ
+40: â > ɨ
+100: [á é ê ó ô] > ɨ
+
+; nasalization
+1: A Cn > ã | C
+1: a m > ã u | _
+10: A Cn > ã | _
+1: E Cn > ẽ | [C _]
+1: I Cn > ĩ | [C _]
+1: O Cn > õ | [C _]
+1: U Cn > ũ | [C _]
+50: Cn | [á â] > ã
+50: Cn | [é ê] > ẽ
+50: Cn | i > ĩ
+50: Cn | [ó ô] > õ
+50: Cn | u > ũ
+
+; basic consonants
+1: x > š
+10: V | x > z | V
+10: x > k ç
+1: s > š | [C _]
+1: V | s > z | V
+1: z > ž | [C _]
+1: [C _] | s > ç | V
+1: q u > k u | [A O]
+1: q u > k | [E I C _]
+2: q u > k u | [E I]
+
+; rhoticism
+50: V | r > [] | [C _]
+
+; voicing matching
+30: Cv | p > b
+30: Cv | t > d
+30: Cv | k > g
+30: Cv | t š > d ž
+30: Cv | š > ž
+30: Cv | f > v
+
+; general pt-ish
+50: o u > o i
+50: k > [] | [t ç]
+50: V | k > i | [t ç]
+50: v > b
+50: i > d j | V
+
+; Brazil
+50: t > t š | [ɨ i]
+50: d > d ž | [ɨ i]
+50: V | l > u | _
+
+; similar sounds
+100: V | [l r t d] > [l r t d] | V
+100: Cn > Cn
+100: š > ç
+100: ž > z
+500: Cs > Cs
+
+; consonant cluster reduction
+100: C | C > []
+
+; CV
+50: λ > d ž
+50: _ | â > [] | C
+30: ã u > õ
+30: â u > ô
+50: š > t š
+50: ž > d ž
+
+; SV
+50: _ | m ɨ > á m | C
+50: [á â] [d t] [o u] > ó t | _
+50: [á â] [b p] [o u] > ó p | _
+50: [á â] [g k] [o u] > ó k | _
+50: [á â] r [o u] > ó r | _
+50: [á â] l [o u] > ó l | _
+50: u r > r u
+50: [á â ó] λ [o u] > ó i
+50: ô λ [o u] > ô i
+
+; devoicing at end of word
+30: b > p | _
+30: d > t | _
+30: g > k | _
+30: d ž > t š | _
+30: ž > š | _
+30: z > ç | _
+30: v > f | _
+
+; dropping end of word
+10: [u ɨ] > [] | _
+20: i u > [] | _
+30: i k u > [] | _
