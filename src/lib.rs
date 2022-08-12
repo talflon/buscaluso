@@ -283,16 +283,31 @@ impl FonRegistry {
     }
 }
 
-type Cost = i32;
+pub struct WordNormalizer;
 
-pub struct Engine {
-    fon_registry: FonRegistry,
+impl WordNormalizer {
+    pub fn new() -> WordNormalizer { WordNormalizer }
+
+    pub fn normalize_into(&self, fon_registry: &FonRegistry, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+        for c in word.chars() {
+            normalized.push(fon_registry.get_id(c)?);
+        }
+        Ok(())
+    }
 }
 
-impl Engine {
-    pub fn new() -> Engine {
-        Engine {
+type Cost = i32;
+
+pub struct BuscaCfg {
+    fon_registry: FonRegistry,
+    normalizer: WordNormalizer,
+}
+
+impl BuscaCfg {
+    pub fn new() -> BuscaCfg {
+        BuscaCfg {
             fon_registry: FonRegistry::new(),
+            normalizer: WordNormalizer::new(),
         }
     }
 
@@ -312,6 +327,10 @@ impl Engine {
             self.add_to_dictionary(&line?.trim())?;
         }
         Ok(())
+    }
+
+    pub fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+        self.normalizer.normalize_into(&self.fon_registry, word, normalized)
     }
 
     pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
@@ -504,5 +523,26 @@ mod tests {
             FonSetSeq::from([[32, 0].into()]).match_at(&FonSetSeq::from([[90, 0, 1].into()]), 1),
             None
         );
+    }
+
+    #[test]
+    fn test_normalize_no_rules() -> Result<()> {
+        let mut reg = FonRegistry::new();
+        let normer = WordNormalizer::new();
+        let s1 = "test";
+        let s2 = "blah";
+        for c in s1.chars().chain(s2.chars()) {
+            reg.add(c)?;
+        }
+        let mut n1a = Vec::new();
+        normer.normalize_into(&reg, s1, &mut n1a)?;
+        assert!(!n1a.is_empty());
+        let mut n1b = Vec::new();
+        normer.normalize_into(&reg, &"a test!"[2..6], &mut n1b)?;
+        assert_eq!(n1b, n1a);
+        let mut n2 = Vec::new();
+        normer.normalize_into(&reg, s2, &mut n2)?;
+        assert_ne!(n2, n1a);
+        Ok(())
     }
 }

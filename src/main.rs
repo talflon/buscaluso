@@ -29,24 +29,24 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut engine = Engine::new();
+    let mut cfg = BuscaCfg::new();
 
     if cli.verbose > 0 {
         eprint!("Loading rules from {:?}...", cli.rules);
         io::stderr().flush()?;
     }
-    engine.load_rules(BufReader::new(File::open(cli.rules)?))?;
+    cfg.load_rules(BufReader::new(File::open(cli.rules)?))?;
     if cli.verbose > 0 {
         eprintln!("done");
         eprint!("Loading dictionary from {:?}...", cli.dict);
         io::stderr().flush()?;
     }
-    engine.load_dictionary(BufReader::new(File::open(cli.dict)?))?;
+    cfg.load_dictionary(BufReader::new(File::open(cli.dict)?))?;
     if cli.verbose > 0 {
         eprintln!("done");
     }
 
-    for result in engine.search(&cli.word) {
+    for result in cfg.search(&cli.word) {
         let (word, cost) = result?;
         println!("{} ({})", word, cost);
     }
