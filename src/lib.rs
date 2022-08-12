@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io;
 use std::io::BufRead;
 
@@ -286,9 +287,16 @@ impl FonRegistry {
 pub struct WordNormalizer;
 
 impl WordNormalizer {
-    pub fn new() -> WordNormalizer { WordNormalizer }
+    pub fn new() -> WordNormalizer {
+        WordNormalizer
+    }
 
-    pub fn normalize_into(&self, fon_registry: &FonRegistry, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+    pub fn normalize_into(
+        &self,
+        fon_registry: &FonRegistry,
+        word: &str,
+        normalized: &mut Vec<FonId>,
+    ) -> Result<()> {
         for c in word.chars() {
             normalized.push(fon_registry.get_id(c)?);
         }
@@ -301,6 +309,7 @@ type Cost = i32;
 pub struct BuscaCfg {
     fon_registry: FonRegistry,
     normalizer: WordNormalizer,
+    dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
 }
 
 impl BuscaCfg {
@@ -308,6 +317,7 @@ impl BuscaCfg {
         BuscaCfg {
             fon_registry: FonRegistry::new(),
             normalizer: WordNormalizer::new(),
+            dictionary: BTreeMap::new(),
         }
     }
 
@@ -318,19 +328,38 @@ impl BuscaCfg {
         Ok(())
     }
 
-    pub fn add_to_dictionary(&mut self, word: &str) -> Result<()> {
+    pub fn add_to_dictionary(&mut self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+        self.normalizer
+            .normalize_into(&self.fon_registry, word, normalized)?;
+        match self.dictionary.get_mut(&normalized[..]) {
+            Some(words) => words.push(word.into()),
+            None => {
+                self.dictionary
+                    .insert((&normalized[..]).into(), vec![word.into()]);
+            }
+        }
         Ok(())
     }
 
-    pub fn load_dictionary<R: BufRead>(&mut self, input: R) -> Result<()> {
-        for line in input.lines() {
-            self.add_to_dictionary(&line?.trim())?;
+    pub fn load_dictionary<R: BufRead>(&mut self, mut input: R) -> Result<()> {
+        let mut line = String::new();
+        let mut normalized = Vec::new();
+        while input.read_line(&mut line)? > 0 {
+            self.add_to_dictionary(line.trim(), &mut normalized)?;
+            line.clear();
+            normalized.clear();
         }
         Ok(())
     }
 
     pub fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        self.normalizer.normalize_into(&self.fon_registry, word, normalized)
+        self.normalizer
+            .normalize_into(&self.fon_registry, word, normalized)
+    }
+
+    pub fn words_iter(&self, fonseq: &[FonId]) -> impl Iterator<Item = &str> {
+        let bs: &[Box<str>] = self.dictionary.get(fonseq).map_or(&[], Vec::as_slice);
+        bs.iter().map(|s| &**s)
     }
 
     pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
@@ -543,6 +572,21 @@ mod tests {
         let mut n2 = Vec::new();
         normer.normalize_into(&reg, s2, &mut n2)?;
         assert_ne!(n2, n1a);
+        Ok(())
+    }
+
+    #[test]
+    fn test_dictionary() -> Result<()> {
+        let mut cfg = BuscaCfg::new();
+        let s: &str = "myword";
+        for c in s.chars() {
+            cfg.fon_registry.add(c)?;
+        }
+        let mut n = Vec::new();
+        cfg.normalize_into(s, &mut n)?;
+        assert_eq!(cfg.words_iter(&n).next(), None);
+        cfg.add_to_dictionary(s, &mut Vec::new())?;
+        assert_eq!(cfg.words_iter(&n).collect::<Vec<_>>(), &[s]);
         Ok(())
     }
 }
