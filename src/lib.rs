@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::io;
 use std::io::BufRead;
@@ -10,10 +12,16 @@ pub type Result<T> = std::result::Result<T, FonError>;
 pub enum FonError {
     #[error("No such fon {0:?}")]
     NoSuchFon(char),
+
     #[error("Ran out of fon ids")]
     NoMoreFonIds,
+
     #[error("No such fon id {0}")]
     NoSuchFonId(FonId),
+
+    #[error("Already had a normalization rule for {0:?}")]
+    DuplicateNormRule(Box<[char]>),
+
     #[error("IO error {source:?}")]
     Io {
         #[from]
@@ -303,11 +311,89 @@ impl Normalizer for FonRegistry {
     }
 }
 
+pub struct NormalizeRuleSet {
+    rules: Vec<BTreeMap<Box<[char]>, Box<[FonId]>>>,
+}
+
+impl NormalizeRuleSet {
+    fn new() -> NormalizeRuleSet {
+        NormalizeRuleSet { rules: Vec::new() }
+    }
+
+    fn rule_len_idx(len: usize) -> usize {
+        len - 1
+    }
+
+    pub fn longest_rule(&self) -> usize {
+        self.rules.len()
+    }
+
+    pub fn add_rule(&mut self, pattern: &[char], normed: &[FonId]) -> Result<()> {
+        while self.longest_rule() < pattern.len() {
+            self.rules.push(BTreeMap::new());
+        }
+        let m = &mut self.rules[Self::rule_len_idx(pattern.len())];
+        if !m.contains_key(pattern) {
+            m.insert(pattern.into(), normed.into());
+            Ok(())
+        } else {
+            Err(DuplicateNormRule(pattern.into()))
+        }
+    }
+
+    pub fn get_rule(&self, pattern: &[char]) -> Option<&[FonId]> {
+        self.rules
+            .get(Self::rule_len_idx(pattern.len()))
+            .and_then(|m| m.get(pattern).map(Box::borrow))
+    }
+
+    pub fn find_rule(&self, input: &[char]) -> Option<(usize, &[FonId])> {
+        for len in (1..=min(input.len(), self.longest_rule())).rev() {
+            if let Some(rule) = self.get_rule(&input[..len]) {
+                return Some((len, rule));
+            }
+        }
+        None
+    }
+}
+
+trait RuleBasedNormalizer {
+    fn rule_set(&self) -> &NormalizeRuleSet;
+    fn fon_registry(&self) -> &FonRegistry;
+}
+
+impl<N: RuleBasedNormalizer> Normalizer for N {
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+        let mut input: &[char] = &Vec::from_iter(word.chars());
+        while !input.is_empty() {
+            if let Some((len, result)) = self.rule_set().find_rule(input) {
+                normalized.extend_from_slice(result);
+                input = &input[len..];
+            } else {
+                normalized.push(self.fon_registry().get_id(input[0])?);
+                input = &input[1..];
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
+    fn rule_set(&self) -> &NormalizeRuleSet {
+        self.0
+    }
+
+    fn fon_registry(&self) -> &FonRegistry {
+        self.1
+    }
+}
+
 type Cost = i32;
 
 pub struct BuscaCfg {
     fon_registry: FonRegistry,
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
+    normalize_rules: NormalizeRuleSet,
 }
 
 impl BuscaCfg {
@@ -315,6 +401,7 @@ impl BuscaCfg {
         BuscaCfg {
             fon_registry: FonRegistry::new(),
             dictionary: BTreeMap::new(),
+            normalize_rules: NormalizeRuleSet::new(),
         }
     }
 
@@ -362,9 +449,13 @@ impl BuscaCfg {
     }
 }
 
-impl Normalizer for BuscaCfg {
-    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        self.fon_registry.normalize_into(word, normalized)
+impl RuleBasedNormalizer for BuscaCfg {
+    fn rule_set(&self) -> &NormalizeRuleSet {
+        &self.normalize_rules
+    }
+
+    fn fon_registry(&self) -> &FonRegistry {
+        &self.fon_registry
     }
 }
 
@@ -634,6 +725,113 @@ mod tests {
         cfg.add_to_dictionary("same", b"two")?;
         assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &["same"]);
         assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &["same"]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_empty_ruleset() {
+        let ruleset = NormalizeRuleSet::new();
+        assert_eq!(ruleset.longest_rule(), 0);
+        assert_eq!(ruleset.get_rule(&['a']), None);
+        assert_eq!(ruleset.get_rule(&['b', 'c']), None);
+        assert_eq!(ruleset.find_rule(&['d']), None);
+        assert_eq!(ruleset.find_rule(&['e', 'f']), None);
+    }
+
+    #[test]
+    fn test_ruleset_add_get() -> Result<()> {
+        let mut ruleset = NormalizeRuleSet::new();
+        ruleset.add_rule(&['c'], b"yes")?;
+        assert_eq!(ruleset.longest_rule(), 1);
+        ruleset.add_rule(&['a', 'b'], b"ok")?;
+        assert_eq!(ruleset.longest_rule(), 2);
+        assert_eq!(ruleset.get_rule(&['a']), None);
+        assert_eq!(ruleset.get_rule(&['a', 'b']), Some(&b"ok"[..]));
+        assert_eq!(ruleset.get_rule(&['c']), Some(&b"yes"[..]));
+        assert_eq!(ruleset.get_rule(&['x', 'c']), None);
+        assert_eq!(ruleset.get_rule(&['c', 'x']), None);
+        assert_eq!(ruleset.get_rule(&['d']), None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_ruleset_add_duplicate() -> Result<()> {
+        let mut ruleset = NormalizeRuleSet::new();
+        ruleset.add_rule(&['c'], b"yes")?;
+        assert!(matches!(
+            ruleset.add_rule(&['c'], b"no"),
+            Err(DuplicateNormRule(_))
+        ));
+        ruleset.add_rule(&['a', 'b'], b"ok")?;
+        assert!(matches!(
+            ruleset.add_rule(&['c'], b"no"),
+            Err(DuplicateNormRule(_))
+        ));
+        assert!(matches!(
+            ruleset.add_rule(&['a', 'b'], b"nope"),
+            Err(DuplicateNormRule(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_ruleset_find() -> Result<()> {
+        let mut ruleset = NormalizeRuleSet::new();
+        ruleset.add_rule(&['a', 'b'], b"ok")?;
+        ruleset.add_rule(&['c'], b"yes")?;
+        assert_eq!(ruleset.find_rule(&['x']), None);
+        assert_eq!(ruleset.find_rule(&['x', 'a', 'b', 'y']), None);
+        assert_eq!(ruleset.find_rule(&['x', 'c', 'y']), None);
+        assert_eq!(ruleset.find_rule(&['c']), Some((1, &b"yes"[..])));
+        assert_eq!(ruleset.find_rule(&['c', 'z']), Some((1, &b"yes"[..])));
+        assert_eq!(ruleset.find_rule(&['a', 'b']), Some((2, &b"ok"[..])));
+        assert_eq!(ruleset.find_rule(&['a', 'b', 'n']), Some((2, &b"ok"[..])));
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_ruleset_and_reg() -> Result<()> {
+        let mut ruleset = NormalizeRuleSet::new();
+        let mut reg = FonRegistry::new();
+        for c in "mno".chars() {
+            reg.add(c)?;
+        }
+        ruleset.add_rule(&['a', 'b', 'c'], &[reg.add('Z')?])?;
+        assert_eq!(
+            (&ruleset, &reg).normalize("noabcm")?,
+            reg.normalize("noZm")?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_ruleset_and_reg_empty_rule() -> Result<()> {
+        let mut ruleset = NormalizeRuleSet::new();
+        let mut reg = FonRegistry::new();
+        for c in "normal".chars() {
+            reg.add(c)?;
+        }
+        ruleset.add_rule(&['a', 'b', 'c'], &[])?;
+        ruleset.add_rule(&['e'], &[])?;
+        assert_eq!(
+            (&ruleset, &reg).normalize("noabcrmael")?,
+            reg.normalize("normal")?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_buscacfg_normalize() -> Result<()> {
+        let mut cfg = BuscaCfg::new();
+        for c in "mno".chars() {
+            cfg.fon_registry.add(c)?;
+        }
+        cfg.normalize_rules
+            .add_rule(&['a', 'b', 'c'], &[cfg.fon_registry.add('Z')?])?;
+        assert_eq!(
+            cfg.normalize("noabcm")?,
+            cfg.fon_registry.normalize("noZm")?
+        );
         Ok(())
     }
 }
