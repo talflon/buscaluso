@@ -5,6 +5,7 @@ use std::io;
 use std::io::BufRead;
 
 use thiserror::Error;
+use unicode_normalization::UnicodeNormalization;
 
 pub type Result<T> = std::result::Result<T, FonError>;
 
@@ -302,9 +303,13 @@ trait Normalizer {
     }
 }
 
+fn prenormalized_chars(word: &str) -> impl Iterator<Item = char> + '_ {
+    word.nfc().flat_map(char::to_lowercase)
+}
+
 impl Normalizer for FonRegistry {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        for c in word.chars().flat_map(char::to_lowercase) {
+        for c in prenormalized_chars(word) {
             normalized.push(self.get_id(c)?);
         }
         Ok(())
@@ -364,7 +369,7 @@ trait RuleBasedNormalizer {
 
 impl<N: RuleBasedNormalizer> Normalizer for N {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        let mut input: &[char] = &Vec::from_iter(word.chars().flat_map(char::to_lowercase));
+        let mut input: &[char] = &Vec::from_iter(prenormalized_chars(word));
         while !input.is_empty() {
             if let Some((len, result)) = self.rule_set().find_rule(input) {
                 normalized.extend_from_slice(result);

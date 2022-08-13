@@ -9,3 +9,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "3.2.16", features = ["derive"] }
 thiserror = "1.0"
+unicode-normalization = "0.1.21"
