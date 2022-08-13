@@ -327,7 +327,11 @@ impl BuscaCfg {
 
     pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {
         match self.dictionary.get_mut(normalized) {
-            Some(words) => words.push(word.into()),
+            Some(words) => {
+                if words.iter().find(|&w| **w == *word).is_none() {
+                    words.push(word.into());
+                }
+            }
             None => {
                 self.dictionary.insert(normalized.into(), vec![word.into()]);
             }
@@ -608,6 +612,28 @@ mod tests {
             BTreeSet::from_iter(cfg.words_iter(b"one")),
             BTreeSet::from(["another", "first"])
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_dictionary_duplicate_one_key() -> Result<()> {
+        let mut cfg = BuscaCfg::new();
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"key")), &[] as &[&str]);
+
+        cfg.add_to_dictionary("value", b"key")?;
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"key")), &["value"]);
+        cfg.add_to_dictionary("value", b"key")?;
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"key")), &["value"]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_dictionary_duplicate_two_keys() -> Result<()> {
+        let mut cfg = BuscaCfg::new();
+        cfg.add_to_dictionary("same", b"one")?;
+        cfg.add_to_dictionary("same", b"two")?;
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &["same"]);
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &["same"]);
         Ok(())
     }
 }
