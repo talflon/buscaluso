@@ -302,6 +302,12 @@ impl WordNormalizer {
         }
         Ok(())
     }
+
+    pub fn normalize(&self, fon_registry: &FonRegistry, word: &str) -> Result<Vec<FonId>> {
+        let mut normalized = Vec::new();
+        self.normalize_into(fon_registry, word, &mut normalized)?;
+        Ok(normalized)
+    }
 }
 
 type Cost = i32;
@@ -328,14 +334,11 @@ impl BuscaCfg {
         Ok(())
     }
 
-    pub fn add_to_dictionary(&mut self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        self.normalizer
-            .normalize_into(&self.fon_registry, word, normalized)?;
-        match self.dictionary.get_mut(&normalized[..]) {
+    pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {
+        match self.dictionary.get_mut(normalized) {
             Some(words) => words.push(word.into()),
             None => {
-                self.dictionary
-                    .insert((&normalized[..]).into(), vec![word.into()]);
+                self.dictionary.insert(normalized.into(), vec![word.into()]);
             }
         }
         Ok(())
@@ -345,7 +348,9 @@ impl BuscaCfg {
         let mut line = String::new();
         let mut normalized = Vec::new();
         while input.read_line(&mut line)? > 0 {
-            self.add_to_dictionary(line.trim(), &mut normalized)?;
+            let word = line.trim();
+            self.normalize_into(word, &mut normalized)?;
+            self.add_to_dictionary(word, &normalized)?;
             line.clear();
             normalized.clear();
         }
@@ -355,6 +360,10 @@ impl BuscaCfg {
     pub fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
         self.normalizer
             .normalize_into(&self.fon_registry, word, normalized)
+    }
+
+    pub fn normalize(&self, word: &str) -> Result<Vec<FonId>> {
+        self.normalizer.normalize(&self.fon_registry, word)
     }
 
     pub fn words_iter(&self, fonseq: &[FonId]) -> impl Iterator<Item = &str> {
@@ -370,6 +379,7 @@ impl BuscaCfg {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn test_fon_registry_empty() {
@@ -576,17 +586,46 @@ mod tests {
     }
 
     #[test]
-    fn test_dictionary() -> Result<()> {
-        let mut cfg = BuscaCfg::new();
-        let s: &str = "myword";
-        for c in s.chars() {
-            cfg.fon_registry.add(c)?;
-        }
+    fn test_normalize_bad_chars() {
+        let reg = FonRegistry::new();
+        let normer = WordNormalizer::new();
         let mut n = Vec::new();
-        cfg.normalize_into(s, &mut n)?;
-        assert_eq!(cfg.words_iter(&n).next(), None);
-        cfg.add_to_dictionary(s, &mut Vec::new())?;
-        assert_eq!(cfg.words_iter(&n).collect::<Vec<_>>(), &[s]);
+        assert!(matches!(
+            normer.normalize_into(&reg, "hi", &mut n),
+            Err(NoSuchFon(_))
+        ));
+    }
+
+    #[test]
+    fn test_dictionary_one_key() -> Result<()> {
+        let mut cfg = BuscaCfg::new();
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &[] as &[&str]);
+
+        cfg.add_to_dictionary("first", b"one")?;
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &["first"]);
+
+        cfg.add_to_dictionary("another", b"one")?;
+        assert_eq!(
+            BTreeSet::from_iter(cfg.words_iter(b"one")),
+            BTreeSet::from(["another", "first"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_dictionary_two_keys() -> Result<()> {
+        let mut cfg = BuscaCfg::new();
+        cfg.add_to_dictionary("first", b"one")?;
+        cfg.add_to_dictionary("another", b"one")?;
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &[] as &[&str]);
+
+        cfg.add_to_dictionary("word", b"two")?;
+        assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &["word"]);
+
+        assert_eq!(
+            BTreeSet::from_iter(cfg.words_iter(b"one")),
+            BTreeSet::from(["another", "first"])
+        );
         Ok(())
     }
 }
