@@ -284,29 +284,22 @@ impl FonRegistry {
     }
 }
 
-pub struct WordNormalizer;
+trait Normalizer {
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()>;
 
-impl WordNormalizer {
-    pub fn new() -> WordNormalizer {
-        WordNormalizer
+    fn normalize(&self, word: &str) -> Result<Vec<FonId>> {
+        let mut normalized = Vec::new();
+        self.normalize_into(word, &mut normalized)?;
+        Ok(normalized)
     }
+}
 
-    pub fn normalize_into(
-        &self,
-        fon_registry: &FonRegistry,
-        word: &str,
-        normalized: &mut Vec<FonId>,
-    ) -> Result<()> {
+impl Normalizer for FonRegistry {
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
         for c in word.chars() {
-            normalized.push(fon_registry.get_id(c)?);
+            normalized.push(self.get_id(c)?);
         }
         Ok(())
-    }
-
-    pub fn normalize(&self, fon_registry: &FonRegistry, word: &str) -> Result<Vec<FonId>> {
-        let mut normalized = Vec::new();
-        self.normalize_into(fon_registry, word, &mut normalized)?;
-        Ok(normalized)
     }
 }
 
@@ -314,7 +307,6 @@ type Cost = i32;
 
 pub struct BuscaCfg {
     fon_registry: FonRegistry,
-    normalizer: WordNormalizer,
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
 }
 
@@ -322,7 +314,6 @@ impl BuscaCfg {
     pub fn new() -> BuscaCfg {
         BuscaCfg {
             fon_registry: FonRegistry::new(),
-            normalizer: WordNormalizer::new(),
             dictionary: BTreeMap::new(),
         }
     }
@@ -357,15 +348,6 @@ impl BuscaCfg {
         Ok(())
     }
 
-    pub fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        self.normalizer
-            .normalize_into(&self.fon_registry, word, normalized)
-    }
-
-    pub fn normalize(&self, word: &str) -> Result<Vec<FonId>> {
-        self.normalizer.normalize(&self.fon_registry, word)
-    }
-
     pub fn words_iter(&self, fonseq: &[FonId]) -> impl Iterator<Item = &str> {
         let bs: &[Box<str>] = self.dictionary.get(fonseq).map_or(&[], Vec::as_slice);
         bs.iter().map(|s| &**s)
@@ -373,6 +355,12 @@ impl BuscaCfg {
 
     pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
         std::iter::empty()
+    }
+}
+
+impl Normalizer for BuscaCfg {
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+        self.fon_registry.normalize_into(word, normalized)
     }
 }
 
@@ -565,35 +553,29 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_no_rules() -> Result<()> {
+    fn test_registry_normalize() -> Result<()> {
         let mut reg = FonRegistry::new();
-        let normer = WordNormalizer::new();
         let s1 = "test";
         let s2 = "blah";
         for c in s1.chars().chain(s2.chars()) {
             reg.add(c)?;
         }
         let mut n1a = Vec::new();
-        normer.normalize_into(&reg, s1, &mut n1a)?;
+        reg.normalize_into(s1, &mut n1a)?;
         assert!(!n1a.is_empty());
         let mut n1b = Vec::new();
-        normer.normalize_into(&reg, &"a test!"[2..6], &mut n1b)?;
+        reg.normalize_into(&"a test!"[2..6], &mut n1b)?;
         assert_eq!(n1b, n1a);
         let mut n2 = Vec::new();
-        normer.normalize_into(&reg, s2, &mut n2)?;
+        reg.normalize_into(s2, &mut n2)?;
         assert_ne!(n2, n1a);
         Ok(())
     }
 
     #[test]
-    fn test_normalize_bad_chars() {
+    fn test_registry_normalize_bad_chars() {
         let reg = FonRegistry::new();
-        let normer = WordNormalizer::new();
-        let mut n = Vec::new();
-        assert!(matches!(
-            normer.normalize_into(&reg, "hi", &mut n),
-            Err(NoSuchFon(_))
-        ));
+        assert!(matches!(reg.normalize("hi"), Err(NoSuchFon(_))));
     }
 
     #[test]
