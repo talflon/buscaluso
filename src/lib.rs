@@ -304,7 +304,7 @@ trait Normalizer {
 
 impl Normalizer for FonRegistry {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        for c in word.chars() {
+        for c in word.chars().flat_map(char::to_lowercase) {
             normalized.push(self.get_id(c)?);
         }
         Ok(())
@@ -364,7 +364,7 @@ trait RuleBasedNormalizer {
 
 impl<N: RuleBasedNormalizer> Normalizer for N {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        let mut input: &[char] = &Vec::from_iter(word.chars());
+        let mut input: &[char] = &Vec::from_iter(word.chars().flat_map(char::to_lowercase));
         while !input.is_empty() {
             if let Some((len, result)) = self.rule_set().find_rule(input) {
                 normalized.extend_from_slice(result);
@@ -674,6 +674,16 @@ mod tests {
     }
 
     #[test]
+    fn test_registry_normalize_lowercases() -> Result<()> {
+        let mut reg = FonRegistry::new();
+        for c in "great".chars() {
+            reg.add(c)?;
+        }
+        assert_eq!(reg.normalize("GrEat")?, reg.normalize("great")?);
+        Ok(())
+    }
+
+    #[test]
     fn test_dictionary_one_key() -> Result<()> {
         let mut cfg = BuscaCfg::new();
         assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &[] as &[&str]);
@@ -796,10 +806,10 @@ mod tests {
         for c in "mno".chars() {
             reg.add(c)?;
         }
-        ruleset.add_rule(&['a', 'b', 'c'], &[reg.add('Z')?])?;
+        ruleset.add_rule(&['a', 'b', 'c'], &[reg.add('z')?])?;
         assert_eq!(
             (&ruleset, &reg).normalize("noabcm")?,
-            reg.normalize("noZm")?
+            reg.normalize("nozm")?
         );
         Ok(())
     }
@@ -821,16 +831,30 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_ruleset_and_reg_lowercases() -> Result<()> {
+        let ruleset = NormalizeRuleSet::new();
+        let mut reg = FonRegistry::new();
+        for c in "great".chars() {
+            reg.add(c)?;
+        }
+        assert_eq!(
+            (&ruleset, &reg).normalize("GrEat")?,
+            (&ruleset, &reg).normalize("great")?
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_buscacfg_normalize() -> Result<()> {
         let mut cfg = BuscaCfg::new();
         for c in "mno".chars() {
             cfg.fon_registry.add(c)?;
         }
         cfg.normalize_rules
-            .add_rule(&['a', 'b', 'c'], &[cfg.fon_registry.add('Z')?])?;
+            .add_rule(&['a', 'b', 'c'], &[cfg.fon_registry.add('z')?])?;
         assert_eq!(
             cfg.normalize("noabcm")?,
-            cfg.fon_registry.normalize("noZm")?
+            cfg.fon_registry.normalize("nozm")?
         );
         Ok(())
     }
