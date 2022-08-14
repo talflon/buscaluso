@@ -316,6 +316,7 @@ impl Normalizer for FonRegistry {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NormalizeRuleSet {
     rules: Vec<BTreeMap<Box<[char]>, Box<[FonId]>>>,
 }
@@ -395,6 +396,7 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
 
 type Cost = i32;
 
+#[derive(Debug, Clone)]
 pub struct BuscaCfg {
     fon_registry: FonRegistry,
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
@@ -420,7 +422,7 @@ impl BuscaCfg {
     pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {
         match self.dictionary.get_mut(normalized) {
             Some(words) => {
-                if words.iter().find(|&w| **w == *word).is_none() {
+                if words.iter().find(|w| w.as_ref() == word).is_none() {
                     words.push(word.into());
                 }
             }
@@ -445,8 +447,11 @@ impl BuscaCfg {
     }
 
     pub fn words_iter(&self, fonseq: &[FonId]) -> impl Iterator<Item = &str> {
-        let bs: &[Box<str>] = self.dictionary.get(fonseq).map_or(&[], Vec::as_slice);
-        bs.iter().map(|s| &**s)
+        self.dictionary
+            .get(fonseq)
+            .map_or(&[] as &[Box<_>], Vec::as_slice)
+            .iter()
+            .map(Box::borrow)
     }
 
     pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
