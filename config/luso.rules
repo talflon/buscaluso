@@ -7,14 +7,14 @@ O = [o ó ô õ]
 U = [u ũ]
 V = [A E I O U ɨ]  ; all vowels
 Vn = [ã ẽ ĩ õ ũ]  ; nasal vowels
-C = [b d f g k l m n p q r s t v x z ç š ž λ]  ; all consonants
+C = [b d f g k l m n p q r s t v x z ç š ž ʎ]  ; all consonants
 Cs = [b d g k p q t]  ; stops
 Cv = [b d g v z ž]  ; voiced
 Cu = [f k p q t ç š]  ; unvoiced
 Cn = [m n ñ]  ; nasal consonants
 
 ; normalization
-l h > λ
+l h > ʎ
 n h > ñ
 c h > š
 p h > f
@@ -115,6 +115,8 @@ v v > v
 50: V | l > u | _
 
 ; similar sounds
+30: l i > ʎ
+30: n i > ñ
 100: V | [l r t d] > [l r t d] | V
 100: Cn > Cn
 100: š > ç
@@ -125,7 +127,7 @@ v v > v
 100: C | C > .
 
 ; CV
-50: λ > d ž
+50: ʎ > d ž
 50: _ | â > . | C
 30: ã u > õ
 30: â u > ô
@@ -140,8 +142,8 @@ v v > v
 50: [á â] r [o u] > ó r | _
 50: [á â] l [o u] > ó l | _
 50: u r > r u
-50: [á â ó] λ [o u] > ó i
-50: ô λ [o u] > ô i
+50: [á â ó] ʎ [o u] > ó i
+50: ô ʎ [o u] > ô i
 
 ; devoicing at end of word
 30: b > p | _
