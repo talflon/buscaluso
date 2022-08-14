@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 use std::cmp::min;
 use std::collections::BTreeMap;
-use std::io;
 use std::io::BufRead;
+use std::{io, iter};
 
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -449,13 +449,23 @@ impl BuscaCfg {
     pub fn words_iter(&self, fonseq: &[FonId]) -> impl Iterator<Item = &str> {
         self.dictionary
             .get(fonseq)
-            .map_or(&[] as &[Box<_>], Vec::as_slice)
-            .iter()
-            .map(Box::borrow)
+            .into_iter()
+            .flat_map(|v| v.iter().map(Box::borrow))
     }
 
     pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
-        std::iter::empty()
+        // initialize two optional iterators, depending on if we get a startup error
+        let (startup_err, items) = match self.normalize(word) {
+            Ok(normalized) => (None, Some(self.words_iter(&normalized).map(|w| Ok((w, 0))))),
+            Err(e) => (Some(iter::once(Err(e))), None),
+        };
+        // chain them together, using into_iter().flatten() to either extract or turn into an empty iterator
+        // this trick allows us to keep a consistent type of the final iterator
+        // trick from Niko Matsakis https://stackoverflow.com/a/52064434
+        startup_err
+            .into_iter()
+            .flatten()
+            .chain(items.into_iter().flatten())
     }
 }
 
@@ -867,5 +877,24 @@ mod tests {
             cfg.fon_registry.normalize("nozm")?
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_buscacfg_search() -> Result<()> {
+        let s = "word";
+        let mut cfg = BuscaCfg::new();
+        for c in s.chars() {
+            cfg.fon_registry.add(c)?;
+        }
+        cfg.add_to_dictionary(s, &cfg.normalize(s)?)?;
+        let result: Result<Vec<(&str, Cost)>> = cfg.search(s).collect();
+        assert_eq!(result?, vec![(s, 0)]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_buscacfg_search_normalize_error() {
+        let cfg = BuscaCfg::new();
+        assert!(matches!(cfg.search("anything").next(), Some(Err(_))));
     }
 }
