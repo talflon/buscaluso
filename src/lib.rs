@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::{io, iter};
 
+use nom::Finish;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
@@ -28,6 +29,9 @@ pub enum FonError {
         #[from]
         source: io::Error,
     },
+
+    #[error("Parsing error on line {line_no}: {text:?}")]
+    ParseErr { line_no: usize, text: String },
 }
 
 use FonError::*;
@@ -413,8 +417,18 @@ impl BuscaCfg {
     }
 
     pub fn load_rules<R: BufRead>(&mut self, input: R) -> Result<()> {
-        for line in input.lines() {
-            let _s = line?;
+        for (line_no, line) in input.lines().enumerate() {
+            match rulefile::rule_line(&line?).finish() {
+                Ok((_, Some(rule))) => {
+                    println!("{:?}", rule);
+                    Ok(())
+                }
+                Ok((_, None)) => Ok(()),
+                Err(x) => Err(ParseErr {
+                    line_no: line_no + 1,
+                    text: x.input.to_owned(),
+                }),
+            }?;
         }
         Ok(())
     }
@@ -476,6 +490,323 @@ impl RuleBasedNormalizer for BuscaCfg {
 
     fn fon_registry(&self) -> &FonRegistry {
         &self.fon_registry
+    }
+}
+
+pub mod rulefile {
+    use super::*;
+
+    use nom::branch::alt;
+    use nom::bytes::complete::take_while1;
+    use nom::character::complete::{anychar, char, digit1, space0, space1};
+    use nom::combinator::{eof, map, map_res, opt, verify};
+    use nom::multi::separated_list1;
+    use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
+    use nom::IResult;
+
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum Rule<'a> {
+        Alias(&'a str, ItemSet<'a>),
+        Norm {
+            from: ItemSetSeq<'a>,
+            to: ItemSeq<'a>,
+        },
+        Mut {
+            cost: Cost,
+            before: ItemSetSeq<'a>,
+            from: ItemSetSeq<'a>,
+            to: ItemSetSeq<'a>,
+            after: ItemSetSeq<'a>,
+        },
+    }
+
+    type IRes<'a, T> = IResult<&'a str, T>;
+
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum Item<'a> {
+        Char(char),
+        Alias(&'a str),
+        Any,
+        None,
+        End,
+    }
+
+    type ItemSet<'a> = Vec<Item<'a>>;
+
+    type ItemSeq<'a> = Vec<Item<'a>>;
+
+    type ItemSetSeq<'a> = Vec<ItemSet<'a>>;
+
+    fn alias_name(input: &str) -> IRes<&str> {
+        verify(take_while1(|c: char| c.is_alphanumeric()), |s: &str| {
+            s.chars().next().unwrap().is_uppercase()
+        })(input)
+    }
+
+    fn item(input: &str) -> IRes<Item> {
+        alt((
+            map(char('*'), |_| Item::Any),
+            map(char('.'), |_| Item::None),
+            map(char('_'), |_| Item::End),
+            map(
+                verify(anychar, |&c| c.is_lowercase() || c == '-'),
+                Item::Char,
+            ),
+            map(alias_name, Item::Alias),
+        ))(input)
+    }
+
+    fn item_seq<'a>(input: &'a str) -> IRes<ItemSeq<'a>> {
+        separated_list1(space1, item)(input)
+    }
+
+    fn item_set<'a>(input: &'a str) -> IRes<ItemSet<'a>> {
+        alt((
+            delimited(char('['), separated_list1(space1, item), char(']')),
+            map(item, |i| vec![i]),
+        ))(input)
+    }
+
+    fn item_set_seq<'a>(input: &'a str) -> IRes<ItemSetSeq<'a>> {
+        separated_list1(space1, item_set)(input)
+    }
+
+    fn cost(input: &str) -> IRes<Cost> {
+        map_res(digit1, |s| Cost::from_str_radix(s, 10))(input)
+    }
+
+    fn alias_rule(input: &str) -> IRes<Rule> {
+        map(
+            separated_pair(alias_name, delimited(space0, char('='), space0), item_set),
+            |(name, value)| Rule::Alias(name, value),
+        )(input)
+    }
+
+    fn norm_rule(input: &str) -> IRes<Rule> {
+        map(
+            separated_pair(item_set_seq, delimited(space0, char('>'), space0), item_seq),
+            |(before, after)| Rule::Norm {
+                from: before,
+                to: after,
+            },
+        )(input)
+    }
+
+    fn mut_rule(input: &str) -> IRes<Rule> {
+        map(
+            tuple((
+                cost,
+                delimited(space0, char(':'), space0),
+                opt(terminated(
+                    item_set_seq,
+                    delimited(space0, char('|'), space0),
+                )),
+                item_set_seq,
+                delimited(space0, char('>'), space0),
+                item_set_seq,
+                opt(preceded(delimited(space0, char('|'), space0), item_set_seq)),
+            )),
+            |(cost, _, look_behind, before, _, after, look_ahead)| Rule::Mut {
+                cost: cost,
+                before: look_behind.unwrap_or_else(Vec::new),
+                from: before,
+                to: after,
+                after: look_ahead.unwrap_or_else(Vec::new),
+            },
+        )(input)
+    }
+
+    fn rule(input: &str) -> IRes<Rule> {
+        alt((alias_rule, norm_rule, mut_rule))(input)
+    }
+
+    fn remainder(input: &str) -> IRes<&str> {
+        Ok(("", input))
+    }
+
+    fn comment(input: &str) -> IRes<&str> {
+        preceded(char(';'), remainder)(input)
+    }
+
+    pub fn rule_line(input: &str) -> IRes<Option<Rule>> {
+        terminated(
+            delimited(space0, opt(rule), preceded(space0, opt(comment))),
+            eof,
+        )(input)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_cost_ok() {
+            assert_eq!(cost("12"), Ok(("", 12)));
+            assert_eq!(cost("0"), Ok(("", 0)));
+            assert_eq!(cost("92837498"), Ok(("", 92837498)));
+            assert_eq!(cost("3"), Ok(("", 3)));
+        }
+
+        #[test]
+        fn test_cost_invalid_negative() {
+            assert!(cost("-44").is_err());
+            assert!(cost("-7").is_err());
+            assert!(cost("-237819").is_err());
+            assert!(cost("-0").is_err());
+        }
+
+        #[test]
+        fn test_cost_invalid() {
+            assert!(cost("xyz").is_err());
+            assert!(cost("twenty2").is_err());
+        }
+
+        #[test]
+        fn test_cost_invalid_fractional() {
+            let mut cost = terminated(cost, eof);
+            assert!(cost("1.0").is_err());
+            assert!(cost("0.0").is_err());
+            assert!(cost("1.1").is_err());
+            assert!(cost("0.1").is_err());
+            assert!(cost(".0").is_err());
+            assert!(cost(".1").is_err());
+            assert!(cost("-1.0").is_err());
+            assert!(cost("-0.0").is_err());
+            assert!(cost("-1.1").is_err());
+            assert!(cost("-0.1").is_err());
+            assert!(cost("-.0").is_err());
+            assert!(cost("-.1").is_err());
+        }
+
+        #[test]
+        fn test_rule_alias_ok() {
+            assert_eq!(
+                rule("A = [a á â]"),
+                Ok((
+                    "",
+                    Rule::Alias("A", vec![Item::Char('a'), Item::Char('á'), Item::Char('â')])
+                ))
+            );
+            assert_eq!(
+                rule("Xx = [_ C]"),
+                Ok(("", Rule::Alias("Xx", vec![Item::End, Item::Alias("C")])))
+            );
+            assert_eq!(
+                rule("Stuff = [x y Things]"),
+                Ok((
+                    "",
+                    Rule::Alias(
+                        "Stuff",
+                        vec![Item::Char('x'), Item::Char('y'), Item::Alias("Things")]
+                    )
+                ))
+            );
+        }
+
+        #[test]
+        fn test_rule_alias_bad() {
+            let mut rule = terminated(rule, eof);
+            assert!(rule("lower = [a b]").is_err());
+            assert!(rule("Upper = lower").is_err());
+            assert!(rule("X = % @").is_err());
+            assert!(rule("[x y] = Z").is_err());
+            assert!(rule("C = [a b] [c d]").is_err());
+        }
+
+        #[test]
+        fn test_rule_norm() {
+            assert_eq!(
+                rule("x y > z"),
+                Ok((
+                    "",
+                    Rule::Norm {
+                        from: vec![vec![Item::Char('x')], vec![Item::Char('y')]],
+                        to: vec![Item::Char('z')]
+                    }
+                ))
+            );
+            assert_eq!(
+                rule("x > y z"),
+                Ok((
+                    "",
+                    Rule::Norm {
+                        from: vec![vec![Item::Char('x')]],
+                        to: vec![Item::Char('y'), Item::Char('z')]
+                    }
+                ))
+            );
+        }
+
+        #[test]
+        fn test_rule_mut() {
+            assert_eq!(
+                rule("3: [C x] | n > m | _"),
+                Ok((
+                    "",
+                    Rule::Mut {
+                        cost: 3,
+                        before: vec![vec![Item::Alias("C"), Item::Char('x')]],
+                        from: vec![vec![Item::Char('n')]],
+                        to: vec![vec![Item::Char('m')]],
+                        after: vec![vec![Item::End]],
+                    }
+                ))
+            );
+            assert_eq!(
+                rule("0: [x] > [y z] N | a b c"),
+                Ok((
+                    "",
+                    Rule::Mut {
+                        cost: 0,
+                        before: vec![],
+                        from: vec![vec![Item::Char('x')]],
+                        to: vec![
+                            vec![Item::Char('y'), Item::Char('z')],
+                            vec![Item::Alias("N")]
+                        ],
+                        after: vec![
+                            vec![Item::Char('a')],
+                            vec![Item::Char('b')],
+                            vec![Item::Char('c')]
+                        ],
+                    }
+                ))
+            );
+            assert_eq!(
+                rule("20 : Blah | a b > [Z z]"),
+                Ok((
+                    "",
+                    Rule::Mut {
+                        cost: 20,
+                        before: vec![vec![Item::Alias("Blah")]],
+                        from: vec![vec![Item::Char('a')], vec![Item::Char('b')]],
+                        to: vec![vec![Item::Alias("Z"), Item::Char('z')]],
+                        after: vec![],
+                    }
+                ))
+            );
+            assert_eq!(
+                rule("99: q > Q"),
+                Ok((
+                    "",
+                    Rule::Mut {
+                        cost: 99,
+                        before: vec![],
+                        from: vec![vec![Item::Char('q')]],
+                        to: vec![vec![Item::Alias("Q")]],
+                        after: vec![],
+                    }
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn test_empty_line() {
+        assert_eq!(rule_line(""), Ok(("", None)));
+        assert_eq!(rule_line("   "), Ok(("", None)));
+        assert_eq!(rule_line("; what ever ; "), Ok(("", None)));
+        assert_eq!(rule_line("\t;stuff"), Ok(("", None)));
     }
 }
 

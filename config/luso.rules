@@ -18,7 +18,7 @@ l h > λ
 n h > ñ
 c h > š
 p h > f
-h > 
+h > .
 [ú ù û w] > u
 [î í ì ï y] > i
 ã o > ã u
@@ -47,7 +47,7 @@ q q > q
 r r > r
 t t > t
 v v > v
-- > []
+- > .
 
 
 ; mutations
@@ -59,7 +59,7 @@ v v > v
 1: o u > ô
 1: o > u | _
 1: e > ɨ | _
-10: ɨ > []
+10: ɨ > .
 20: i > ɨ
 30: u > ɨ
 40: â > ɨ
@@ -92,7 +92,7 @@ v v > v
 2: q u > k u | [E I]
 
 ; rhoticism
-50: V | r > [] | [C _]
+50: V | r > . | [C _]
 
 ; voicing matching
 30: Cv | p > b
@@ -104,7 +104,7 @@ v v > v
 
 ; general pt-ish
 50: o u > o i
-50: k > [] | [t ç]
+50: k > . | [t ç]
 50: V | k > i | [t ç]
 50: v > b
 50: i > d j | V
@@ -122,11 +122,11 @@ v v > v
 500: Cs > Cs
 
 ; consonant cluster reduction
-100: C | C > []
+100: C | C > .
 
 ; CV
 50: λ > d ž
-50: _ | â > [] | C
+50: _ | â > . | C
 30: ã u > õ
 30: â u > ô
 50: š > t š
@@ -153,6 +153,6 @@ v v > v
 30: v > f | _
 
 ; dropping end of word
-10: [u ɨ] > [] | _
-20: i u > [] | _
-30: i k u > [] | _
+10: [u ɨ] > . | _
+20: i u > . | _
+30: i k u > . | _
