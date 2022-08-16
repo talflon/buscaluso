@@ -38,11 +38,11 @@ pub enum Item<'a> {
     End,
 }
 
-type ItemSet<'a> = Vec<Item<'a>>;
+pub type ItemSet<'a> = Vec<Item<'a>>;
 
-type ItemSeq<'a> = Vec<Item<'a>>;
+pub type ItemSeq<'a> = Vec<Item<'a>>;
 
-type ItemSetSeq<'a> = Vec<ItemSet<'a>>;
+pub type ItemSetSeq<'a> = Vec<ItemSet<'a>>;
 
 fn alias_name(input: &str) -> IRes<&str> {
     verify(take_while1(|c: char| c.is_alphanumeric()), |s: &str| {

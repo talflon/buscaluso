@@ -5,6 +5,7 @@ use std::io::BufRead;
 use std::{io, iter};
 
 use nom::Finish;
+use rulefile::Rule;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
@@ -28,6 +29,9 @@ pub enum FonError {
 
     #[error("Already had a normalization rule for {0:?}")]
     DuplicateNormRule(Box<[char]>),
+
+    #[error("No such alias {0:?}")]
+    NoSuchAlias(String),
 
     #[error("IO error {source:?}")]
     Io {
@@ -410,6 +414,7 @@ pub struct BuscaCfg {
     fon_registry: FonRegistry,
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
     normalize_rules: NormalizeRuleSet,
+    aliases: BTreeMap<String, FonSet>,
 }
 
 impl BuscaCfg {
@@ -418,16 +423,14 @@ impl BuscaCfg {
             fon_registry: FonRegistry::new(),
             dictionary: BTreeMap::new(),
             normalize_rules: NormalizeRuleSet::new(),
+            aliases: BTreeMap::new(),
         }
     }
 
     pub fn load_rules<R: BufRead>(&mut self, input: R) -> Result<()> {
         for (line_no, line) in input.lines().enumerate() {
             match rulefile::rule_line(&line?).finish() {
-                Ok((_, Some(rule))) => {
-                    println!("{:?}", rule);
-                    Ok(())
-                }
+                Ok((_, Some(rule))) => self.add_rule(rule),
                 Ok((_, None)) => Ok(()),
                 Err(x) => Err(ParseErr {
                     line_no: line_no + 1,
@@ -436,6 +439,44 @@ impl BuscaCfg {
             }?;
         }
         Ok(())
+    }
+
+    fn add_rule(&mut self, rule: Rule) -> Result<()> {
+        match rule {
+            Rule::Alias(name, items) => {
+                let fons = self.resolve_rule_item_set(items)?;
+                self.set_alias(name.into(), fons);
+            }
+            _ => println!("TODO {:?}", rule),
+        }
+        Ok(())
+    }
+
+    pub fn try_get_alias(&self, alias: &str) -> Option<FonSet> {
+        self.aliases.get(alias).cloned()
+    }
+
+    pub fn get_alias(&self, alias: &str) -> Result<FonSet> {
+        self.try_get_alias(alias)
+            .ok_or_else(|| NoSuchAlias(alias.into()))
+    }
+
+    pub fn set_alias(&mut self, name: String, fons: FonSet) {
+        self.aliases.insert(name, fons);
+    }
+
+    fn resolve_rule_item_set(&mut self, items: rulefile::ItemSet) -> Result<FonSet> {
+        let mut fons = FonSet::NULL;
+        for item in items {
+            match item {
+                rulefile::Item::Char(c) => fons |= self.fon_registry.add(c)?,
+                rulefile::Item::Alias(name) => fons |= self.get_alias(name)?,
+                rulefile::Item::Any => todo!(),
+                rulefile::Item::None => todo!(),
+                rulefile::Item::End => todo!(),
+            }
+        }
+        Ok(fons)
     }
 
     pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {

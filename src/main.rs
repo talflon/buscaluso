@@ -38,6 +38,9 @@ fn main() -> Result<()> {
     cfg.load_rules(BufReader::new(File::open(cli.rules)?))?;
     if cli.verbose > 0 {
         eprintln!("done");
+        if cli.verbose >= 2 {
+            eprintln!("{:?}", cfg);
+        }
         eprint!("Loading dictionary from {:?}...", cli.dict);
         io::stderr().flush()?;
     }

@@ -2,6 +2,8 @@ use super::*;
 
 use std::collections::BTreeSet;
 
+use rulefile::Item;
+
 #[test]
 fn test_fon_registry_empty() {
     let reg = FonRegistry::new();
@@ -414,4 +416,30 @@ fn test_buscacfg_search() -> Result<()> {
 fn test_buscacfg_search_normalize_error() {
     let cfg = BuscaCfg::new();
     assert!(matches!(cfg.search("anything").next(), Some(Err(_))));
+}
+
+#[test]
+fn test_set_alias() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    let fons = [3, 4, 5];
+    assert_eq!(cfg.try_get_alias("blah"), None);
+    assert!(matches!(cfg.get_alias("blah"), Err(NoSuchAlias(_))));
+    cfg.set_alias("blah".into(), fons.into());
+    assert_eq!(cfg.try_get_alias("blah"), Some(fons.into()));
+    assert_eq!(cfg.get_alias("blah")?, fons.into());
+    assert_eq!(cfg.try_get_alias("blah!"), None);
+    assert!(matches!(cfg.get_alias("blah!"), Err(NoSuchAlias(_))));
+    Ok(())
+}
+
+#[test]
+fn test_add_rule_alias() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.fon_registry.add('a')?;
+    cfg.add_rule(Rule::Alias("Hi", vec![Item::Char('a')]))?;
+    assert_eq!(
+        cfg.get_alias("Hi")?,
+        FonSet::from(cfg.fon_registry.get_id('a')?)
+    );
+    Ok(())
 }
