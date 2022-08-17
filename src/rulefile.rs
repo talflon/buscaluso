@@ -33,9 +33,7 @@ type IRes<'a, T> = IResult<&'a str, T>;
 pub enum Item<'a> {
     Char(char),
     Alias(&'a str),
-    Any,
     None,
-    End,
 }
 
 pub type ItemSet<'a> = Vec<Item<'a>>;
@@ -50,15 +48,14 @@ fn alias_name(input: &str) -> IRes<&str> {
     })(input)
 }
 
+fn is_valid_char(c: &char) -> bool {
+    c.is_lowercase() || *c == '-' || *c == '\''
+}
+
 fn item(input: &str) -> IRes<Item> {
     alt((
-        map(char('*'), |_| Item::Any),
-        map(char('.'), |_| Item::None),
-        map(char('_'), |_| Item::End),
-        map(
-            verify(anychar, |&c| c.is_lowercase() || c == '-'),
-            Item::Char,
-        ),
+        map(char('_'), |_| Item::None),
+        map(verify(anychar, is_valid_char), Item::Char),
         map(alias_name, Item::Alias),
     ))(input)
 }

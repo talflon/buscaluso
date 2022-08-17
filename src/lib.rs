@@ -471,9 +471,7 @@ impl BuscaCfg {
             match item {
                 rulefile::Item::Char(c) => fons |= self.fon_registry.add(c)?,
                 rulefile::Item::Alias(name) => fons |= self.get_alias(name)?,
-                rulefile::Item::Any => todo!(),
                 rulefile::Item::None => todo!(),
-                rulefile::Item::End => todo!(),
             }
         }
         Ok(fons)

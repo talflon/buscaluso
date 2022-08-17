@@ -50,7 +50,7 @@ fn test_rule_alias_ok() {
     );
     assert_eq!(
         rule("Xx = [_ C]"),
-        Ok(("", Rule::Alias("Xx", vec![Item::End, Item::Alias("C")])))
+        Ok(("", Rule::Alias("Xx", vec![Item::None, Item::Alias("C")])))
     );
     assert_eq!(
         rule("Stuff = [x y Things]"),
@@ -109,7 +109,7 @@ fn test_rule_mut() {
                 before: vec![vec![Item::Alias("C"), Item::Char('x')]],
                 from: vec![vec![Item::Char('n')]],
                 to: vec![vec![Item::Char('m')]],
-                after: vec![vec![Item::End]],
+                after: vec![vec![Item::None]],
             }
         ))
     );
