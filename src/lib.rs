@@ -49,6 +49,10 @@ const MAX_FON_ID: FonId = 127;
 
 type FonId = u8;
 
+pub const NO_FON: FonId = 0;
+
+pub const NO_FON_CHAR: char = '_';
+
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct FonSet {
     bits: u128,
@@ -71,6 +75,10 @@ impl FonSet {
 
     pub fn is_empty(&self) -> bool {
         self.bits == 0
+    }
+
+    pub fn is_real(&self) -> bool {
+        !self.contains(NO_FON)
     }
 
     pub fn iter(&self) -> FonSetIter {
@@ -231,6 +239,10 @@ impl FonSetSeq {
         self.0.is_empty() || self.iter().any(|s| s.is_empty())
     }
 
+    pub fn is_real(&self) -> bool {
+        self.0.is_empty() || self.iter().all(|s| s.is_real())
+    }
+
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -275,7 +287,7 @@ pub struct FonRegistry {
 
 impl FonRegistry {
     pub fn new() -> FonRegistry {
-        FonRegistry { fons: Vec::new() }
+        FonRegistry { fons: vec![NO_FON_CHAR] }
     }
 
     pub fn add(&mut self, fon: char) -> Result<FonId> {

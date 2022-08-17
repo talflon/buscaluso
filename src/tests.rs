@@ -10,9 +10,21 @@ fn test_fon_registry_empty() {
     for c in ['q', 'é', '\0'] {
         assert!(matches!(reg.get_id(c), Err(NoSuchFon(c_)) if c_ == c));
     }
-    for i in [0, 1, 2, 35, MAX_FON_ID] {
+    for i in [1, 2, 35, MAX_FON_ID] {
         assert!(matches!(reg.get_fon(i), Err(NoSuchFonId(i_)) if i_ == i));
     }
+}
+
+#[test]
+fn test_fon_registry_has_no_fon() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(reg.try_get_id(NO_FON_CHAR), Some(NO_FON));
+    assert_eq!(reg.try_get_fon(NO_FON), Some(NO_FON_CHAR));
+    reg.add('ȟ')?;
+    reg.add('r')?;
+    assert_eq!(reg.try_get_id(NO_FON_CHAR), Some(NO_FON));
+    assert_eq!(reg.try_get_fon(NO_FON), Some(NO_FON_CHAR));
+    Ok(())
 }
 
 #[test]
@@ -41,7 +53,8 @@ fn test_too_many_registries() -> Result<()> {
     let mut reg = FonRegistry::new();
     for c in (1..)
         .flat_map(char::from_u32)
-        .take((MAX_FON_ID as usize) + 1)
+        .filter(|&c| c != NO_FON_CHAR)
+        .take(MAX_FON_ID as usize)
     {
         reg.add(c)?;
     }
@@ -57,6 +70,23 @@ fn test_fonset_empty() {
     for i in 0..=MAX_FON_ID {
         assert!(!s.contains(i))
     }
+}
+
+#[test]
+fn test_fonset_real() {
+    let mut s = FonSet::new();
+    assert_eq!(s.is_real(), true);
+    s |= 12;
+    assert_eq!(s.is_real(), true);
+    s |= NO_FON;
+    assert_eq!(s.is_real(), false);
+    s -= 12;
+    assert_eq!(s.is_real(), false);
+    s |= 3;
+    s |= 101;
+    assert_eq!(s.is_real(), false);
+    s -= NO_FON;
+    assert_eq!(s.is_real(), true);
 }
 
 #[test]
@@ -160,12 +190,21 @@ fn test_fonset_fons() -> Result<()> {
 
 #[test]
 fn test_fonsetseq_empty() {
-    assert!(FonSetSeq::from([]).is_empty());
-    assert!(FonSetSeq::from([FonSet::EMPTY]).is_empty());
-    assert!(FonSetSeq::from([FonSet::EMPTY, FonSet::EMPTY]).is_empty());
-    assert!(FonSetSeq::from([FonSet::EMPTY, FonSet::from(3)]).is_empty());
-    assert!(FonSetSeq::from([2.into(), FonSet::EMPTY]).is_empty());
-    assert!(!FonSetSeq::from([2.into(), 3.into()]).is_empty());
+    assert_eq!(FonSetSeq::from([]).is_empty(), true);
+    assert_eq!(FonSetSeq::from([FonSet::EMPTY]).is_empty(), true);
+    assert_eq!(FonSetSeq::from([FonSet::EMPTY, FonSet::EMPTY]).is_empty(), true);
+    assert_eq!(FonSetSeq::from([FonSet::EMPTY, FonSet::from(3)]).is_empty(), true);
+    assert_eq!(FonSetSeq::from([2.into(), FonSet::EMPTY]).is_empty(), true);
+    assert_eq!(FonSetSeq::from([2.into(), 3.into()]).is_empty(), false);
+}
+
+#[test]
+fn test_fonsetseq_real() {
+    assert_eq!(FonSetSeq::from([]).is_real(), true);
+    assert_eq!(FonSetSeq::from([FonSet::EMPTY]).is_real(), true);
+    assert_eq!(FonSetSeq::from([FonSet::from(NO_FON)]).is_real(), false);
+    assert_eq!(FonSetSeq::from([FonSet::from([2, 3]), FonSet::from(NO_FON), FonSet::from(80)]).is_real(), false);
+    assert_eq!(FonSetSeq::from([FonSet::from([2, 3]), FonSet::EMPTY, FonSet::from(80)]).is_real(), true);
 }
 
 #[test]
