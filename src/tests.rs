@@ -190,44 +190,77 @@ fn test_fonset_fons() -> Result<()> {
 
 #[test]
 fn test_fonsetseq_empty() {
-    assert_eq!(FonSetSeq::from([]).is_empty(), true);
-    assert_eq!(FonSetSeq::from([FonSet::EMPTY]).is_empty(), true);
-    assert_eq!(FonSetSeq::from([FonSet::EMPTY, FonSet::EMPTY]).is_empty(), true);
-    assert_eq!(FonSetSeq::from([FonSet::EMPTY, FonSet::from(3)]).is_empty(), true);
-    assert_eq!(FonSetSeq::from([2.into(), FonSet::EMPTY]).is_empty(), true);
-    assert_eq!(FonSetSeq::from([2.into(), 3.into()]).is_empty(), false);
+    assert_eq!(FonSet::seq_is_empty(&[]), true);
+    assert_eq!(FonSet::seq_is_empty(&[FonSet::EMPTY]), true);
+    assert_eq!(FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::EMPTY]), true);
+    assert_eq!(
+        FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::from(3)]),
+        true
+    );
+    assert_eq!(FonSet::seq_is_empty(&[2.into(), FonSet::EMPTY]), true);
+    assert_eq!(FonSet::seq_is_empty(&[2.into(), 3.into()]), false);
 }
 
 #[test]
 fn test_fonsetseq_real() {
-    assert_eq!(FonSetSeq::from([]).is_real(), true);
-    assert_eq!(FonSetSeq::from([FonSet::EMPTY]).is_real(), true);
-    assert_eq!(FonSetSeq::from([FonSet::from(NO_FON)]).is_real(), false);
-    assert_eq!(FonSetSeq::from([FonSet::from([2, 3]), FonSet::from(NO_FON), FonSet::from(80)]).is_real(), false);
-    assert_eq!(FonSetSeq::from([FonSet::from([2, 3]), FonSet::EMPTY, FonSet::from(80)]).is_real(), true);
+    assert_eq!(FonSet::seq_is_real(&[]), true);
+    assert_eq!(FonSet::seq_is_real(&[FonSet::EMPTY]), true);
+    assert_eq!(FonSet::seq_is_real(&[FonSet::from(NO_FON)]), false);
+    assert_eq!(
+        FonSet::seq_is_real(&[FonSet::from([2, 3]), FonSet::from(NO_FON), FonSet::from(80)]),
+        false
+    );
+    assert_eq!(
+        FonSet::seq_is_real(&[FonSet::from([2, 3]), FonSet::EMPTY, FonSet::from(80)]),
+        true
+    );
+}
+
+#[test]
+fn test_fonsetseq_valid() {
+    assert_eq!(FonSet::seq_is_valid(&[]), true);
+    assert_eq!(FonSet::seq_is_valid(&[FonSet::EMPTY]), true);
+    assert_eq!(FonSet::seq_is_valid(&[FonSet::from(NO_FON)]), true);
+    assert_eq!(
+        FonSet::seq_is_valid(&[FonSet::from([2, 3]), FonSet::from(NO_FON), FonSet::from(80)]),
+        false
+    );
+    assert_eq!(
+        FonSet::seq_is_valid(&[FonSet::from([2, 3]), FonSet::EMPTY, FonSet::from(80)]),
+        true
+    );
+    assert_eq!(
+        FonSet::seq_is_valid(&[
+            FonSet::from(NO_FON),
+            FonSet::from([2, 3]),
+            FonSet::from(80),
+            FonSet::from(NO_FON)
+        ]),
+        true
+    );
 }
 
 #[test]
 fn test_fonsetseq_match_at_in_bounds() {
-    let seq1 = FonSetSeq::from([[2, 4].into(), [1, 2, 3].into()]);
-    let seq2 = FonSetSeq::from([[2, 5].into()]);
+    let seq1: &[FonSet] = &[[2, 4].into(), [1, 2, 3].into()];
+    let seq2: &[FonSet] = &[[2, 5].into()];
     assert_eq!(
-        seq2.match_at(&seq1, 0),
-        Some(FonSetSeq::from([2.into(), [1, 2, 3].into()]))
+        FonSet::seq_match_at(&seq2, &seq1, 0),
+        Some(vec![2.into(), [1, 2, 3].into()])
     );
     assert_eq!(
-        seq2.match_at(&seq1, 1),
-        Some(FonSetSeq::from([[2, 4].into(), 2.into()]))
+        FonSet::seq_match_at(&seq2, &seq1, 1),
+        Some(vec![[2, 4].into(), 2.into()])
     );
-    assert_eq!(FonSetSeq::from([81.into()]).match_at(&seq1, 0), None);
-    assert_eq!(FonSetSeq::from([81.into()]).match_at(&seq1, 1), None);
+    assert_eq!(FonSet::seq_match_at(&[81.into()], &seq1, 0), None);
+    assert_eq!(FonSet::seq_match_at(&[81.into()], &seq1, 1), None);
 }
 
 #[test]
-fn test_fonsetseq_match_at_out_of_bounds() {
-    assert_eq!(FonSetSeq::from([]).match_at(&FonSetSeq::from([]), 1), None);
+fn test_fonset_seq_match_at_out_of_bounds() {
+    assert_eq!(FonSet::seq_match_at(&[], &[], 1), None);
     assert_eq!(
-        FonSetSeq::from([[32, 0].into()]).match_at(&FonSetSeq::from([[90, 0, 1].into()]), 1),
+        FonSet::seq_match_at(&[[32, 0].into()], &[[90, 0, 1].into()], 1),
         None
     );
 }

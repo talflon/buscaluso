@@ -95,6 +95,54 @@ impl FonSet {
         }
         Ok(result)
     }
+
+    pub fn seq_is_empty<S: AsRef<[FonSet]>>(seq: &S) -> bool {
+        let slice = seq.as_ref();
+        slice.is_empty() || slice.iter().any(|s| s.is_empty())
+    }
+
+    pub fn seq_is_real<S: AsRef<[FonSet]>>(seq: &S) -> bool {
+        let slice = seq.as_ref();
+        slice.is_empty() || slice.iter().all(|s| s.is_real())
+    }
+
+    pub fn seq_is_valid<S: AsRef<[FonSet]>>(seq: &S) -> bool {
+        let slice = seq.as_ref();
+        slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
+    }
+
+    pub fn seq_match_at_into<P: AsRef<[FonSet]>, S: AsRef<[FonSet]>>(
+        pattern: &P,
+        seq: &S,
+        index: usize,
+        result: &mut Vec<FonSet>,
+    ) -> bool {
+        let pattern_slice = pattern.as_ref();
+        let seq_slice = seq.as_ref();
+        if index + pattern_slice.len() > seq_slice.len() {
+            false
+        } else {
+            result.clear();
+            result.extend_from_slice(seq_slice);
+            for i in 0..pattern_slice.len() {
+                result[index + i] &= pattern_slice[i];
+            }
+            !FonSet::seq_is_empty(result)
+        }
+    }
+
+    pub fn seq_match_at<P: AsRef<[FonSet]>, S: AsRef<[FonSet]>>(
+        pattern: &P,
+        seq: &S,
+        index: usize,
+    ) -> Option<Vec<FonSet>> {
+        let mut result = Vec::new();
+        if Self::seq_match_at_into(pattern, seq, index, &mut result) {
+            Some(result)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<FonId> for FonSet {
@@ -231,55 +279,6 @@ impl FromIterator<FonId> for FonSet {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct FonSetSeq(Vec<FonSet>);
-
-impl FonSetSeq {
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty() || self.iter().any(|s| s.is_empty())
-    }
-
-    pub fn is_real(&self) -> bool {
-        self.0.is_empty() || self.iter().all(|s| s.is_real())
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = FonSet> + '_ {
-        self.0.iter().copied()
-    }
-
-    pub fn match_at(&self, seq: &FonSetSeq, index: usize) -> Option<FonSetSeq> {
-        if index + self.len() > seq.len() {
-            None
-        } else {
-            let mut result = seq.clone();
-            for (i, s) in self.iter().enumerate() {
-                result.0[index + i] &= s;
-            }
-            if result.is_empty() {
-                None
-            } else {
-                Some(result)
-            }
-        }
-    }
-}
-
-impl From<Vec<FonSet>> for FonSetSeq {
-    fn from(v: Vec<FonSet>) -> FonSetSeq {
-        FonSetSeq(v)
-    }
-}
-
-impl<const N: usize> From<[FonSet; N]> for FonSetSeq {
-    fn from(a: [FonSet; N]) -> FonSetSeq {
-        FonSetSeq(Vec::from(a))
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct FonRegistry {
     fons: Vec<char>,
@@ -287,7 +286,9 @@ pub struct FonRegistry {
 
 impl FonRegistry {
     pub fn new() -> FonRegistry {
-        FonRegistry { fons: vec![NO_FON_CHAR] }
+        FonRegistry {
+            fons: vec![NO_FON_CHAR],
+        }
     }
 
     pub fn add(&mut self, fon: char) -> Result<FonId> {
