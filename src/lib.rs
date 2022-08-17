@@ -55,7 +55,11 @@ pub struct FonSet {
 }
 
 impl FonSet {
-    pub const NULL: FonSet = FonSet { bits: 0 };
+    pub const EMPTY: FonSet = FonSet { bits: 0 };
+
+    pub fn new() -> FonSet {
+        FonSet::EMPTY
+    }
 
     pub fn contains(&self, id: FonId) -> bool {
         self.bits & (1 << id) != 0
@@ -93,7 +97,7 @@ impl From<FonId> for FonSet {
 
 impl<const N: usize> From<[FonId; N]> for FonSet {
     fn from(fons: [FonId; N]) -> Self {
-        let mut s = FonSet::NULL;
+        let mut s = FonSet::new();
         for f in fons {
             s |= f;
         }
@@ -211,7 +215,7 @@ impl IntoIterator for FonSet {
 
 impl FromIterator<FonId> for FonSet {
     fn from_iter<I: IntoIterator<Item = FonId>>(iter: I) -> Self {
-        let mut s = FonSet::NULL;
+        let mut s = FonSet::new();
         for i in iter {
             s |= i;
         }
@@ -466,7 +470,7 @@ impl BuscaCfg {
     }
 
     fn resolve_rule_item_set(&mut self, items: rulefile::ItemSet) -> Result<FonSet> {
-        let mut fons = FonSet::NULL;
+        let mut fons = FonSet::new();
         for item in items {
             match item {
                 rulefile::Item::Char(c) => fons |= self.fon_registry.add(c)?,

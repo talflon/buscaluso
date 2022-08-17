@@ -48,14 +48,14 @@ fn alias_name(input: &str) -> IRes<&str> {
     })(input)
 }
 
-fn is_valid_char(c: &char) -> bool {
-    c.is_lowercase() || *c == '-' || *c == '\''
+fn is_valid_char(c: char) -> bool {
+    c.is_lowercase() || c == '-' || c == '\''
 }
 
 fn item(input: &str) -> IRes<Item> {
     alt((
         map(char('_'), |_| Item::None),
-        map(verify(anychar, is_valid_char), Item::Char),
+        map(verify(anychar, |&c| is_valid_char(c)), Item::Char),
         map(alias_name, Item::Alias),
     ))(input)
 }

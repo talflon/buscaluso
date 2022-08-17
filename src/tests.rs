@@ -50,8 +50,8 @@ fn test_too_many_registries() -> Result<()> {
 }
 
 #[test]
-fn test_fonset_null() {
-    let s = FonSet::NULL;
+fn test_fonset_empty() {
+    let s = FonSet::EMPTY;
     assert!(s.is_empty());
     assert_eq!(s.len(), 0);
     for i in 0..=MAX_FON_ID {
@@ -62,7 +62,13 @@ fn test_fonset_null() {
 #[test]
 fn test_fonset_default() {
     let s: FonSet = Default::default();
-    assert_eq!(s, FonSet::NULL);
+    assert_eq!(s, FonSet::EMPTY);
+}
+
+#[test]
+fn test_fonset_new() {
+    let s: FonSet = FonSet::new();
+    assert_eq!(s, FonSet::EMPTY);
 }
 
 #[test]
@@ -88,7 +94,7 @@ fn test_fonset_from_one_only_contains_it() {
 
 #[test]
 fn test_fonset_add_with_oreq() {
-    let mut s = FonSet::NULL;
+    let mut s = FonSet::new();
     s |= 3;
     s |= 17;
     s |= 1;
@@ -105,7 +111,7 @@ fn test_fonset_subtract() {
 
 #[test]
 fn test_oreq_subeq() {
-    let mut s = FonSet::NULL;
+    let mut s = FonSet::EMPTY;
     s |= 77;
     s -= 77;
     assert!(!s.contains(77));
@@ -132,7 +138,7 @@ fn test_fonset_iter() {
 #[test]
 fn test_fonset_for_loop() {
     let s1 = FonSet::from([0, 55, 3, 11, 8]);
-    let mut s2: FonSet = FonSet::NULL;
+    let mut s2: FonSet = FonSet::new();
     for i in s1 {
         s2 |= i;
     }
@@ -142,23 +148,23 @@ fn test_fonset_for_loop() {
 #[test]
 fn test_fonset_fons() -> Result<()> {
     let mut reg = FonRegistry::new();
-    let mut s = FonSet::NULL;
+    let mut s = FonSet::new();
     let chars = vec!['$', 'q', 'A', 'ç'];
     for &c in chars.iter() {
         s |= reg.add(c)?;
     }
     assert_eq!(s.fons(&reg)?, chars);
-    assert_eq!(FonSet::NULL.fons(&reg)?, vec![]);
+    assert_eq!(FonSet::EMPTY.fons(&reg)?, vec![]);
     Ok(())
 }
 
 #[test]
 fn test_fonsetseq_empty() {
     assert!(FonSetSeq::from([]).is_empty());
-    assert!(FonSetSeq::from([FonSet::NULL]).is_empty());
-    assert!(FonSetSeq::from([FonSet::NULL, FonSet::NULL]).is_empty());
-    assert!(FonSetSeq::from([FonSet::NULL, FonSet::from(3)]).is_empty());
-    assert!(FonSetSeq::from([2.into(), FonSet::NULL]).is_empty());
+    assert!(FonSetSeq::from([FonSet::EMPTY]).is_empty());
+    assert!(FonSetSeq::from([FonSet::EMPTY, FonSet::EMPTY]).is_empty());
+    assert!(FonSetSeq::from([FonSet::EMPTY, FonSet::from(3)]).is_empty());
+    assert!(FonSetSeq::from([2.into(), FonSet::EMPTY]).is_empty());
     assert!(!FonSetSeq::from([2.into(), 3.into()]).is_empty());
 }
 
