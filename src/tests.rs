@@ -463,6 +463,80 @@ fn test_normalize_ruleset_and_reg_lowercases() -> Result<()> {
 }
 
 #[test]
+fn test_normalize_ruleset_and_reg_end_anchored_rule() -> Result<()> {
+    let mut ruleset = NormalizeRuleSet::new();
+    let mut reg = FonRegistry::new();
+    for c in "be".chars() {
+        reg.add(c)?;
+    }
+    ruleset.add_rule(&['s', 't', '_'], &[reg.add('d')?])?;
+    assert_eq!((&ruleset, &reg).normalize("best")?, reg.normalize("bed")?);
+    Ok(())
+}
+
+#[test]
+fn test_normalize_ruleset_and_reg_start_anchored_rule() -> Result<()> {
+    let mut ruleset = NormalizeRuleSet::new();
+    let mut reg = FonRegistry::new();
+    for c in "crow".chars() {
+        reg.add(c)?;
+    }
+    ruleset.add_rule(&['_', 'w'], &[reg.add('c')?, reg.add('r')?])?;
+    assert_eq!((&ruleset, &reg).normalize("wow")?, reg.normalize("crow")?);
+    Ok(())
+}
+
+#[test]
+fn test_normalize_ruleset_and_reg_empty_result_rule() -> Result<()> {
+    let mut ruleset = NormalizeRuleSet::new();
+    let mut reg = FonRegistry::new();
+    for c in "tests".chars() {
+        reg.add(c)?;
+    }
+    ruleset.add_rule(&['s'], &[])?;
+    assert_eq!((&ruleset, &reg).normalize("tests")?, reg.normalize("tet")?);
+    Ok(())
+}
+
+#[test]
+fn test_normalize_ruleset_and_reg_drop_from_start() -> Result<()> {
+    let mut ruleset = NormalizeRuleSet::new();
+    let mut reg = FonRegistry::new();
+    for c in "worddrop".chars() {
+        reg.add(c)?;
+    }
+    ruleset.add_rule(&['_', 'd', 'r', 'o', 'p'], &[])?;
+    assert_eq!(
+        (&ruleset, &reg).normalize("dropword")?,
+        reg.normalize("word")?
+    );
+    assert_eq!(
+        (&ruleset, &reg).normalize("worddrop")?,
+        reg.normalize("worddrop")?
+    );
+    Ok(())
+}
+
+#[test]
+fn test_normalize_ruleset_and_reg_drop_from_end() -> Result<()> {
+    let mut ruleset = NormalizeRuleSet::new();
+    let mut reg = FonRegistry::new();
+    for c in "worddrop".chars() {
+        reg.add(c)?;
+    }
+    ruleset.add_rule(&['d', 'r', 'o', 'p', '_'], &[])?;
+    assert_eq!(
+        (&ruleset, &reg).normalize("worddrop")?,
+        reg.normalize("word")?
+    );
+    assert_eq!(
+        (&ruleset, &reg).normalize("dropword")?,
+        reg.normalize("dropword")?
+    );
+    Ok(())
+}
+
+#[test]
 fn test_buscacfg_normalize() -> Result<()> {
     let mut cfg = BuscaCfg::new();
     for c in "mno".chars() {
@@ -478,7 +552,7 @@ fn test_buscacfg_normalize() -> Result<()> {
 }
 
 #[test]
-fn test_buscacfg_search() -> Result<()> {
+fn test_buscacfg_search_with_normalize() -> Result<()> {
     let s = "word";
     let mut cfg = BuscaCfg::new();
     for c in s.chars() {
@@ -494,6 +568,20 @@ fn test_buscacfg_search() -> Result<()> {
 fn test_buscacfg_search_normalize_error() {
     let cfg = BuscaCfg::new();
     assert!(matches!(cfg.search("anything").next(), Some(Err(_))));
+}
+
+#[test]
+fn test_buscacfg_search_with_normalize_for_not_present() -> Result<()> {
+    let s1 = "uma";
+    let s2 = "outra";
+    let mut cfg = BuscaCfg::new();
+    for c in s1.chars().chain(s2.chars()) {
+        cfg.fon_registry.add(c)?;
+    }
+    cfg.add_to_dictionary(s1, &cfg.normalize(s1)?)?;
+    let result: Result<Vec<(&str, Cost)>> = cfg.search(s2).collect();
+    assert_eq!(result?, vec![]);
+    Ok(())
 }
 
 #[test]

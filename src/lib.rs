@@ -400,20 +400,30 @@ trait RuleBasedNormalizer {
 
 impl<N: RuleBasedNormalizer> Normalizer for N {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
-        let mut input: &[char] = &Vec::from_iter(prenormalized_chars(word));
+        // surround input with NO_FON_CHAR to handle anchored normalization rules
+        let mut input: Vec<char> = Vec::new();
+        input.push(NO_FON_CHAR);
+        input.extend(prenormalized_chars(word));
+        input.push(NO_FON_CHAR);
+        // treat input as a mutable slice so we can easily drop from the front by reassigning
+        let mut input: &[char] = &input;
         while !input.is_empty() {
             if let Some((len, result)) = self.rule_set().find_rule(input) {
                 normalized.extend_from_slice(result);
                 input = &input[len..];
             } else {
-                normalized.push(self.fon_registry().get_id(input[0])?);
+                if input[0] != NO_FON_CHAR {
+                    normalized.push(self.fon_registry().get_id(input[0])?);
+                }
                 input = &input[1..];
             }
         }
+        // we're done because our result has been pushed into `normalized`
         Ok(())
     }
 }
 
+// allows for easier testing of trait
 impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
     fn rule_set(&self) -> &NormalizeRuleSet {
         self.0
