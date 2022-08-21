@@ -1,5 +1,7 @@
 use super::*;
 
+use core::fmt;
+
 use nom::branch::alt;
 use nom::bytes::complete::take_while1;
 use nom::character::complete::{anychar, char, digit1, space0, space1};
@@ -36,11 +38,30 @@ pub enum Item<'a> {
     None,
 }
 
+// TODO: read https://github.com/apolitical/impl-display-for-vec and possible apply here
+
 pub type ItemSet<'a> = Vec<Item<'a>>;
 
 pub type ItemSeq<'a> = Vec<Item<'a>>;
 
 pub type ItemSetSeq<'a> = Vec<ItemSet<'a>>;
+
+impl<'a> fmt::Display for Item<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Item::Char(c) => write!(f, "{}", c),
+            Item::Alias(name) => write!(f, "{}", name),
+            Item::None => write!(f, "_"),
+        }
+    }
+}
+
+pub fn item_seq_to_str(seq: &ItemSeq) -> String {
+    seq.iter()
+        .map(|item| format!("{}", item))
+        .reduce(|a, b| format!("{} {}", a, b))
+        .unwrap_or("".to_string())
+}
 
 fn alias_name(input: &str) -> IRes<&str> {
     verify(take_while1(|c: char| c.is_alphanumeric()), |s: &str| {

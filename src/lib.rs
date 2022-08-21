@@ -30,6 +30,9 @@ pub enum FonError {
     #[error("Already had a normalization rule for {0:?}")]
     DuplicateNormRule(Box<[char]>),
 
+    #[error("Invalid normalization rule: {0}")]
+    InvalidNormRule(String),
+
     #[error("No such alias {0:?}")]
     NoSuchAlias(String),
 
@@ -471,10 +474,33 @@ impl BuscaCfg {
     fn add_rule(&mut self, rule: Rule) -> Result<()> {
         match rule {
             Rule::Alias(name, items) => {
-                let fons = self.resolve_rule_item_set(items)?;
+                let fons = self.resolve_rule_item_set(&items)?;
                 self.set_alias(name.into(), fons);
             }
-            _ => println!("TODO {:?}", rule),
+            Rule::Norm { from, to } => {
+                let from_fonsets: Result<Vec<FonSet>> = from
+                    .iter()
+                    .map(|items| self.resolve_rule_item_set(items))
+                    .collect();
+                let from_fonsets = from_fonsets?;
+                let from_chars: Result<Vec<char>> = from_fonsets
+                    .iter()
+                    .map(|s| {
+                        if s.len() == 1 {
+                            self.fon_registry.get_fon(s.iter().next().unwrap())
+                        } else {
+                            todo!(
+                                "handle sets of more than one in normalize rule pattern: {:?}",
+                                from
+                            )
+                        }
+                    })
+                    .collect();
+                let from_chars = from_chars?;
+                let to_fons = self.resolve_norm_rule_result(&to)?;
+                self.normalize_rules.add_rule(&from_chars, &to_fons)?;
+            }
+            _ => todo!("handle this rule: {:?}", rule),
         }
         Ok(())
     }
@@ -492,16 +518,38 @@ impl BuscaCfg {
         self.aliases.insert(name, fons);
     }
 
-    fn resolve_rule_item_set(&mut self, items: rulefile::ItemSet) -> Result<FonSet> {
+    fn resolve_rule_item_set(&mut self, items: &rulefile::ItemSet) -> Result<FonSet> {
         let mut fons = FonSet::new();
         for item in items {
             match item {
-                rulefile::Item::Char(c) => fons |= self.fon_registry.add(c)?,
+                rulefile::Item::Char(c) => fons |= self.fon_registry.add(*c)?,
                 rulefile::Item::Alias(name) => fons |= self.get_alias(name)?,
                 rulefile::Item::None => todo!(),
             }
         }
         Ok(fons)
+    }
+
+    fn resolve_norm_rule_result_into(
+        &mut self,
+        rule_result: &rulefile::ItemSeq,
+        normalized: &mut Vec<FonId>,
+    ) -> Result<()> {
+        if rule_result != &[rulefile::Item::None] {
+            for item in rule_result {
+                match item {
+                    rulefile::Item::Char(c) => normalized.push(self.fon_registry.add(*c)?),
+                    _ => return Err(InvalidNormRule(rulefile::item_seq_to_str(rule_result))),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve_norm_rule_result(&mut self, rule_result: &rulefile::ItemSeq) -> Result<Vec<FonId>> {
+        let mut normalized = Vec::new();
+        self.resolve_norm_rule_result_into(rule_result, &mut normalized)?;
+        Ok(normalized)
     }
 
     pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {

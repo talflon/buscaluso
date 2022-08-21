@@ -609,3 +609,27 @@ fn test_add_rule_alias() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn test_resolve_norm_rule_result() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    let r = cfg.resolve_norm_rule_result(&vec![Item::Char('o'), Item::Char('k')])?;
+    assert_eq!(r, cfg.normalize("ok")?);
+    Ok(())
+}
+
+#[test]
+fn test_invalid_normalize_rule_rhs() {
+    assert!(matches!(
+        BuscaCfg::new().load_rules("a b > a _".as_bytes()),
+        Err(InvalidNormRule(_))
+    ));
+    assert!(matches!(
+        BuscaCfg::new().load_rules("a b > _ c".as_bytes()),
+        Err(InvalidNormRule(_))
+    ));
+    assert!(matches!(
+        BuscaCfg::new().load_rules("C = [z r]\nv > C".as_bytes()),
+        Err(InvalidNormRule(_))
+    ));
+}
