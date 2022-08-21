@@ -601,11 +601,21 @@ fn test_set_alias() -> Result<()> {
 #[test]
 fn test_add_rule_alias() -> Result<()> {
     let mut cfg = BuscaCfg::new();
-    cfg.fon_registry.add('a')?;
     cfg.add_rule(Rule::Alias("Hi", vec![Item::Char('a')]))?;
     assert_eq!(
         cfg.get_alias("Hi")?,
         FonSet::from(cfg.fon_registry.get_id('a')?)
+    );
+    Ok(())
+}
+
+#[test]
+fn test_add_rule_alias_with_anchor() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.add_rule(Rule::Alias("Xy", vec![Item::Char('n'), Item::None]))?;
+    assert_eq!(
+        cfg.get_alias("Xy")?,
+        FonSet::from([cfg.fon_registry.get_id('n')?, NO_FON])
     );
     Ok(())
 }
@@ -632,4 +642,122 @@ fn test_invalid_normalize_rule_rhs() {
         BuscaCfg::new().load_rules("C = [z r]\nv > C".as_bytes()),
         Err(InvalidNormRule(_))
     ));
+}
+
+#[test]
+fn test_invalid_normalize_rule_lhs() {
+    assert!(BuscaCfg::new().load_rules(" > a".as_bytes()).is_err());
+    assert!(BuscaCfg::new().load_rules("a _ b > c".as_bytes()).is_err());
+    assert!(BuscaCfg::new().load_rules("_ _ _ > c".as_bytes()).is_err());
+}
+
+#[test]
+fn test_resolve_rule_item_set_alias() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    let s = FonSet::from([cfg.fon_registry.add('w')?, cfg.fon_registry.add('p')?]);
+    cfg.set_alias("N".into(), s);
+    let r = cfg.resolve_rule_item_set(&vec![Item::Alias("N")])?;
+    assert_eq!(r, s);
+    Ok(())
+}
+
+#[test]
+fn test_resolve_rule_item_set_alias_plus() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    let s = FonSet::from([cfg.fon_registry.add('w')?, cfg.fon_registry.add('p')?]);
+    cfg.set_alias("N".into(), s);
+    let r = cfg.resolve_rule_item_set(&vec![Item::Char('q'), Item::Alias("N")])?;
+    assert_eq!(r, s | cfg.fon_registry.get_id('q')?);
+    Ok(())
+}
+
+#[test]
+fn test_resolve_rule_item_set_alias_plus_anchor() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    let s = FonSet::from([cfg.fon_registry.add('w')?, cfg.fon_registry.add('p')?]);
+    cfg.set_alias("N".into(), s);
+    let r = cfg.resolve_rule_item_set(&vec![Item::Alias("N"), Item::None])?;
+    assert_eq!(r, s | NO_FON);
+    Ok(())
+}
+
+#[test]
+fn test_add_rule_norm_simple() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.add_rule(Rule::Norm {
+        from: vec![vec![Item::Char('a')], vec![Item::Char('b')]],
+        to: vec![Item::Char('c'), Item::Char('d')],
+    })?;
+    assert_eq!(
+        cfg.normalize_rules.get_rule(&['a', 'b']),
+        Some(cfg.normalize("cd")?.as_slice())
+    );
+    Ok(())
+}
+
+#[test]
+fn test_add_rule_norm_anchored_start() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.add_rule(Rule::Norm {
+        from: vec![vec![Item::None], vec![Item::Char('x')]],
+        to: vec![Item::Char('y')],
+    })?;
+    assert_eq!(
+        cfg.normalize_rules.get_rule(&[NO_FON_CHAR, 'x']),
+        Some(cfg.normalize("y")?.as_slice())
+    );
+    Ok(())
+}
+
+#[test]
+fn test_add_rule_norm_anchored_end() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.add_rule(Rule::Norm {
+        from: vec![vec![Item::Char('e')], vec![Item::None]],
+        to: vec![Item::Char('r')],
+    })?;
+    assert_eq!(
+        cfg.normalize_rules.get_rule(&['e', NO_FON_CHAR]),
+        Some(cfg.normalize("r")?.as_slice())
+    );
+    Ok(())
+}
+
+#[test]
+fn test_add_rule_norm_with_sets() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.add_rule(Rule::Norm {
+        from: vec![
+            vec![Item::Char('n')],
+            vec![Item::Char('a'), Item::Char('o')],
+        ],
+        to: vec![Item::Char('y')],
+    })?;
+    assert_eq!(
+        cfg.normalize_rules.get_rule(&['n', 'o']),
+        Some(cfg.normalize("y")?.as_slice())
+    );
+    Ok(())
+}
+
+#[test]
+fn test_for_cartesian_product() -> Result<()> {
+    let items: Vec<Vec<i32>> = vec![vec![3, 4], vec![7], vec![0, 10, 100]];
+    let mut results = Vec::new();
+    for_cartesian_product(&items, |i| {
+        results.push(Vec::from(i));
+        Ok(())
+    })?;
+    assert_eq!(
+        results,
+        vec![
+            vec![3, 7, 0],
+            vec![3, 7, 10],
+            vec![3, 7, 100],
+            vec![4, 7, 0],
+            vec![4, 7, 10],
+            vec![4, 7, 100],
+        ]
+    );
+    Ok(())
 }

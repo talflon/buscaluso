@@ -56,6 +56,17 @@ impl<'a> fmt::Display for Item<'a> {
     }
 }
 
+pub fn item_set_seq_to_str(seq: &ItemSetSeq) -> String {
+    seq.iter()
+        .map(|s| item_set_to_str(s))
+        .reduce(|a, b| format!("{} {}", a, b))
+        .unwrap_or("".to_string())
+}
+
+pub fn item_set_to_str(seq: &ItemSet) -> String {
+    format!("[{}]", item_seq_to_str(seq))
+}
+
 pub fn item_seq_to_str(seq: &ItemSeq) -> String {
     seq.iter()
         .map(|item| format!("{}", item))

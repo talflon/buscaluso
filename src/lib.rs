@@ -415,6 +415,7 @@ impl<N: RuleBasedNormalizer> Normalizer for N {
                 normalized.extend_from_slice(result);
                 input = &input[len..];
             } else {
+                // fall back to registry, to output a single char. but ignore end anchors
                 if input[0] != NO_FON_CHAR {
                     normalized.push(self.fon_registry().get_id(input[0])?);
                 }
@@ -478,29 +479,13 @@ impl BuscaCfg {
                 self.set_alias(name.into(), fons);
             }
             Rule::Norm { from, to } => {
-                let from_fonsets: Result<Vec<FonSet>> = from
-                    .iter()
-                    .map(|items| self.resolve_rule_item_set(items))
-                    .collect();
-                let from_fonsets = from_fonsets?;
-                let from_chars: Result<Vec<char>> = from_fonsets
-                    .iter()
-                    .map(|s| {
-                        if s.len() == 1 {
-                            self.fon_registry.get_fon(s.iter().next().unwrap())
-                        } else {
-                            todo!(
-                                "handle sets of more than one in normalize rule pattern: {:?}",
-                                from
-                            )
-                        }
-                    })
-                    .collect();
-                let from_chars = from_chars?;
+                let from_charsets = self.resolve_norm_rule_lhs(&from)?;
                 let to_fons = self.resolve_norm_rule_result(&to)?;
-                self.normalize_rules.add_rule(&from_chars, &to_fons)?;
+                for_cartesian_product(&from_charsets, |from_chars| {
+                    self.normalize_rules.add_rule(&from_chars, &to_fons)
+                })?;
             }
-            _ => todo!("handle this rule: {:?}", rule),
+            _ => eprintln!("TODO: {:?}", rule),
         }
         Ok(())
     }
@@ -524,7 +509,7 @@ impl BuscaCfg {
             match item {
                 rulefile::Item::Char(c) => fons |= self.fon_registry.add(*c)?,
                 rulefile::Item::Alias(name) => fons |= self.get_alias(name)?,
-                rulefile::Item::None => todo!(),
+                rulefile::Item::None => fons |= NO_FON,
             }
         }
         Ok(fons)
@@ -550,6 +535,27 @@ impl BuscaCfg {
         let mut normalized = Vec::new();
         self.resolve_norm_rule_result_into(rule_result, &mut normalized)?;
         Ok(normalized)
+    }
+
+    fn resolve_norm_rule_lhs(&mut self, rule_lhs: &rulefile::ItemSetSeq) -> Result<Vec<Vec<char>>> {
+        let fonsets: Result<Vec<FonSet>> = rule_lhs
+            .iter()
+            .map(|items| self.resolve_rule_item_set(items))
+            .collect();
+        let fonsets = fonsets?;
+        if !FonSet::seq_is_valid(&fonsets) {
+            return Err(InvalidNormRule(rulefile::item_set_seq_to_str(rule_lhs)));
+        }
+
+        let mut output = Vec::new();
+        for fon_set in fonsets {
+            let char_set: Result<Vec<char>> = fon_set
+                .iter()
+                .map(|i| self.fon_registry.get_fon(i))
+                .collect();
+            output.push(char_set?);
+        }
+        Ok(output)
     }
 
     pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {
@@ -609,5 +615,33 @@ impl RuleBasedNormalizer for BuscaCfg {
 
     fn fon_registry(&self) -> &FonRegistry {
         &self.fon_registry
+    }
+}
+
+fn for_cartesian_product<T, S, F>(items: &[S], mut f: F) -> Result<()>
+where
+    S: AsRef<[T]>,
+    T: Copy + Default,
+    F: FnMut(&[T]) -> Result<()>,
+{
+    let len = items.len();
+    let mut indices: Vec<usize> = vec![0; len];
+    let mut output: Vec<T> = vec![Default::default(); len];
+    loop {
+        for i in 0..len {
+            output[i] = items[i].as_ref()[indices[i]];
+        }
+        f(&output)?;
+        for idx in (0..len).rev() {
+            indices[idx] += 1;
+            if indices[idx] == items[idx].as_ref().len() {
+                if idx == 0 {
+                    return Ok(());
+                }
+                indices[idx] = 0;
+            } else {
+                break;
+            }
+        }
     }
 }
