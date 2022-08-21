@@ -4,7 +4,7 @@ A = [a á â ã]
 E = [e é ê ẽ]
 I = [i ĩ]
 O = [o ó ô õ]
-U = [u ũ]
+U = [u ũ ü]
 V = [A E I O U ɨ]  ; all vowels
 Vn = [ã ẽ ĩ õ ũ]  ; nasal vowels
 C = [b d f g k l m n p q r s t v x z ç š ž ʎ]  ; all consonants
@@ -87,9 +87,11 @@ v v > v
 1: V | s > z | V
 1: z > ž | [C _]
 1: [C _] | s > ç | V
+1: q ü > k u
 1: q u > k u | [A O]
 1: q u > k | [E I C _]
 2: q u > k u | [E I]
+1: g u > g | [E I C _]
 
 ; rhoticism
 50: V | r > _ | [C _]
