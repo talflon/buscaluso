@@ -1,7 +1,11 @@
-use std::io;
 use std::io::prelude::*;
+
+use std::cell::RefCell;
+use std::fs::File;
+use std::io;
 use std::io::BufReader;
-use std::{fs::File, path::PathBuf};
+use std::iter;
+use std::path::PathBuf;
 
 use clap::Parser;
 
@@ -12,7 +16,7 @@ use buscaluso::*;
 struct Cli {
     /// Word to search for
     #[clap(value_parser)]
-    word: String,
+    word: Option<String>,
 
     /// Rules file
     #[clap(short, long, value_parser)]
@@ -49,9 +53,35 @@ fn main() -> Result<()> {
         eprintln!("done");
     }
 
-    for result in cfg.search(&cli.word) {
-        let (word, cost) = result?;
-        println!("{} ({})", word, cost);
+    match cli.word {
+        Some(word) => {
+            for result in cfg.search(&word) {
+                let (word, cost) = result?;
+                println!("{} ({})", word, cost);
+            }
+        }
+        None => {
+            // interactive mode
+            let mut iter: Box<RefCell<dyn Iterator<Item = Result<(&str, Cost)>>>> =
+                Box::new(RefCell::new(iter::empty()));
+            let mut line = String::new();
+            while io::stdin().read_line(&mut line)? > 0 {
+                let word = line.trim();
+                if cli.verbose >= 2 {
+                    eprintln!("{:?}", word);
+                }
+                if word.len() > 0 {
+                    iter = Box::new(RefCell::new(cfg.search(word)));
+                }
+                line.clear();
+                if let Some(result) = iter.borrow_mut().next() {
+                    let (word, cost) = result?;
+                    println!("{} ({})", word, cost);
+                } else if cli.verbose >= 2 {
+                    println!("(done)");
+                }
+            }
+        }
     }
     Ok(())
 }

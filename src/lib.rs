@@ -438,7 +438,7 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
     }
 }
 
-type Cost = i32;
+pub type Cost = i32;
 
 #[derive(Debug, Clone)]
 pub struct BuscaCfg {
