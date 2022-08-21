@@ -403,6 +403,9 @@ trait RuleBasedNormalizer {
 
 impl<N: RuleBasedNormalizer> Normalizer for N {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+        if word.contains(NO_FON_CHAR) {
+            return Err(NoSuchFon(NO_FON_CHAR));
+        }
         // surround input with NO_FON_CHAR to handle anchored normalization rules
         let mut input: Vec<char> = Vec::new();
         input.push(NO_FON_CHAR);

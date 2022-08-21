@@ -537,6 +537,22 @@ fn test_normalize_ruleset_and_reg_drop_from_end() -> Result<()> {
 }
 
 #[test]
+fn test_normalize_ruleset_and_reg_refuses_no_fon_char() -> Result<()> {
+    let ruleset = NormalizeRuleSet::new();
+    let mut reg = FonRegistry::new();
+    for c in "abcjklm".chars() {
+        reg.add(c)?;
+    }
+    assert!(matches!((&ruleset, &reg).normalize("_"), Err(NoSuchFon(c)) if c == '_'));
+    assert!(matches!((&ruleset, &reg).normalize("_ab"), Err(NoSuchFon(c)) if c == '_'));
+    assert!(matches!((&ruleset, &reg).normalize("c_"), Err(NoSuchFon(c)) if c == '_'));
+    assert!(matches!((&ruleset, &reg).normalize("jk_lm"), Err(NoSuchFon(c)) if c == '_'));
+    assert!(matches!((&ruleset, &reg).normalize("__"), Err(NoSuchFon(c)) if c == '_'));
+    assert!(matches!((&ruleset, &reg).normalize("___"), Err(NoSuchFon(c)) if c == '_'));
+    Ok(())
+}
+
+#[test]
 fn test_buscacfg_normalize() -> Result<()> {
     let mut cfg = BuscaCfg::new();
     for c in "mno".chars() {
