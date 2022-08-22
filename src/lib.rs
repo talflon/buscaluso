@@ -324,7 +324,18 @@ impl FonRegistry {
     pub fn get_fon(&self, id: FonId) -> Result<char> {
         self.try_get_fon(id).ok_or(NoSuchFonId(id))
     }
+
+    pub fn mark(&self) -> FonRegistryMark {
+        FonRegistryMark(self.fons.len())
+    }
+
+    pub fn revert(&mut self, mark: FonRegistryMark) {
+        self.fons.truncate(mark.0);
+    }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FonRegistryMark(usize);
 
 trait Normalizer {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()>;
@@ -541,6 +552,7 @@ impl BuscaCfg {
     }
 
     fn resolve_norm_rule_lhs(&mut self, rule_lhs: &rulefile::ItemSetSeq) -> Result<Vec<Vec<char>>> {
+        let mark = self.fon_registry.mark();
         let fonsets: Result<Vec<FonSet>> = rule_lhs
             .iter()
             .map(|items| self.resolve_rule_item_set(items))
@@ -558,6 +570,7 @@ impl BuscaCfg {
                 .collect();
             output.push(char_set?);
         }
+        self.fon_registry.revert(mark);
         Ok(output)
     }
 

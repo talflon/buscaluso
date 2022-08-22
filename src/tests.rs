@@ -757,6 +757,19 @@ fn test_add_rule_norm_with_sets() -> Result<()> {
 }
 
 #[test]
+fn test_add_rule_norm_adds_rhs_only_to_registry() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.add_rule(Rule::Norm {
+        from: vec![vec![Item::Char('a')], vec![Item::Char('b')]],
+        to: vec![Item::Char('c')],
+    })?;
+    assert!(cfg.fon_registry.get_id('c').is_ok());
+    assert!(cfg.fon_registry.get_id('a').is_err());
+    assert!(cfg.fon_registry.get_id('b').is_err());
+    Ok(())
+}
+
+#[test]
 fn test_for_cartesian_product() -> Result<()> {
     let items: Vec<Vec<i32>> = vec![vec![3, 4], vec![7], vec![0, 10, 100]];
     let mut results = Vec::new();
