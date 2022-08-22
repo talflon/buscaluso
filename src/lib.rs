@@ -529,11 +529,8 @@ impl BuscaCfg {
         Ok(fons)
     }
 
-    fn resolve_norm_rule_result_into(
-        &mut self,
-        rule_result: &rulefile::ItemSeq,
-        normalized: &mut Vec<FonId>,
-    ) -> Result<()> {
+    fn resolve_norm_rule_result(&mut self, rule_result: &rulefile::ItemSeq) -> Result<Vec<FonId>> {
+        let mut normalized = Vec::new();
         if rule_result != &[rulefile::Item::None] {
             for item in rule_result {
                 match item {
@@ -542,12 +539,6 @@ impl BuscaCfg {
                 }
             }
         }
-        Ok(())
-    }
-
-    fn resolve_norm_rule_result(&mut self, rule_result: &rulefile::ItemSeq) -> Result<Vec<FonId>> {
-        let mut normalized = Vec::new();
-        self.resolve_norm_rule_result_into(rule_result, &mut normalized)?;
         Ok(normalized)
     }
 
