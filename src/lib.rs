@@ -36,6 +36,9 @@ pub enum FonError {
     #[error("No such alias {0:?}")]
     NoSuchAlias(String),
 
+    #[error("Invalid mutation rule")]
+    InvalidMutationRule,
+
     #[error("IO error {source:?}")]
     Io {
         #[from]
@@ -120,6 +123,7 @@ impl FonSet {
         index: usize,
         result: &mut Vec<FonSet>,
     ) -> bool {
+        debug_assert!(result.is_empty());
         let pattern_slice = pattern.as_ref();
         let seq_slice = seq.as_ref();
         if index + pattern_slice.len() > seq_slice.len() {
@@ -452,7 +456,108 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MutationRule {
+    pattern: Box<[FonSet]>,
+    remove_idx: usize,
+    remove_len: usize,
+    replace_with: Box<[FonSet]>,
+}
+
+impl MutationRule {
+    fn create(
+        lookbehind: &[FonSet],
+        old_pattern: &[FonSet],
+        new_pattern: &[FonSet],
+        lookahead: &[FonSet],
+    ) -> Result<MutationRule> {
+        if !FonSet::seq_is_real(&new_pattern) {
+            return Err(InvalidMutationRule);
+        }
+        let mut pattern = Vec::new();
+        pattern.extend_from_slice(lookbehind);
+        pattern.extend_from_slice(old_pattern);
+        pattern.extend_from_slice(lookahead);
+        if !FonSet::seq_is_valid(&pattern) {
+            return Err(InvalidMutationRule);
+        }
+        Ok(MutationRule {
+            pattern: pattern.into(),
+            remove_idx: lookbehind.len(),
+            remove_len: old_pattern.len(),
+            replace_with: new_pattern.into(),
+        })
+    }
+
+    fn get_pattern(&self) -> &[FonSet] {
+        &self.pattern
+    }
+
+    fn get_lookbehind(&self) -> &[FonSet] {
+        &self.pattern[..self.get_remove_start()]
+    }
+
+    fn get_lookahead(&self) -> &[FonSet] {
+        &self.pattern[self.get_remove_end()..]
+    }
+
+    fn get_old_pattern(&self) -> &[FonSet] {
+        &self.pattern[self.get_remove_start()..self.get_remove_end()]
+    }
+
+    fn get_new_pattern(&self) -> &[FonSet] {
+        &self.replace_with
+    }
+
+    fn get_remove_start(&self) -> usize {
+        self.remove_idx
+    }
+
+    fn get_remove_end(&self) -> usize {
+        self.remove_idx + self.remove_len
+    }
+
+    fn get_remove_len(&self) -> usize {
+        self.remove_len
+    }
+
+    fn match_at_into(&self, word: &[FonSet], index: usize, result: &mut Vec<FonSet>) -> bool {
+        debug_assert!(result.is_empty());
+        if FonSet::seq_match_at_into(&self.pattern, &word, index, result) {
+            result.splice(
+                (index + self.get_remove_start())..(index + self.get_remove_end()),
+                self.get_new_pattern().iter().cloned(),
+            );
+            true
+        } else {
+            false
+        }
+    }
+
+    fn match_at(&self, word: &[FonSet], index: usize) -> Option<Vec<FonSet>> {
+        let mut result = Vec::new();
+        if self.match_at_into(word, index, &mut result) {
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
 pub type Cost = i32;
+
+#[derive(Debug, Clone)]
+struct MutationRuleSet {}
+
+impl MutationRuleSet {
+    fn new() -> MutationRuleSet {
+        MutationRuleSet {}
+    }
+
+    fn add_rule(&mut self, rule: MutationRule, cost: Cost) {
+        eprintln!("TODO add to MutationRuleSet: {:?} = {}", rule, cost);
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BuscaCfg {
@@ -460,6 +565,7 @@ pub struct BuscaCfg {
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
     normalize_rules: NormalizeRuleSet,
     aliases: BTreeMap<String, FonSet>,
+    mutation_rules: MutationRuleSet,
 }
 
 impl BuscaCfg {
@@ -469,6 +575,7 @@ impl BuscaCfg {
             dictionary: BTreeMap::new(),
             normalize_rules: NormalizeRuleSet::new(),
             aliases: BTreeMap::new(),
+            mutation_rules: MutationRuleSet::new(),
         }
     }
 
@@ -499,7 +606,26 @@ impl BuscaCfg {
                     self.normalize_rules.add_rule(&from_chars, &to_fons)
                 })?;
             }
-            _ => eprintln!("TODO: {:?}", rule),
+            Rule::Mut {
+                cost,
+                before,
+                from,
+                to,
+                after,
+            } => {
+                let lookbehind = self.resolve_lookaround_item_set_seq(&before)?;
+                let from = self.resolve_mutation_item_set_seq(&from)?;
+                let to = self.resolve_mutation_item_set_seq(&to)?;
+                let lookahead = self.resolve_lookaround_item_set_seq(&after)?;
+                self.mutation_rules.add_rule(
+                    MutationRule::create(&lookbehind, &from, &to, &lookahead)?,
+                    cost,
+                );
+                self.mutation_rules.add_rule(
+                    MutationRule::create(&lookbehind, &to, &from, &lookahead)?,
+                    cost,
+                );
+            }
         }
         Ok(())
     }
@@ -540,6 +666,37 @@ impl BuscaCfg {
             }
         }
         Ok(normalized)
+    }
+
+    fn resolve_rule_item_set_seq(
+        &mut self,
+        item_sets: &rulefile::ItemSetSeq,
+    ) -> Result<Vec<FonSet>> {
+        let mut result = Vec::new();
+        for item_set in item_sets {
+            result.push(self.resolve_rule_item_set(item_set)?);
+        }
+        Ok(result)
+    }
+
+    fn resolve_lookaround_item_set_seq(
+        &mut self,
+        item_sets: &rulefile::ItemSetSeq,
+    ) -> Result<Vec<FonSet>> {
+        self.resolve_rule_item_set_seq(item_sets)
+    }
+
+    fn resolve_mutation_item_set_seq(
+        &mut self,
+        item_sets: &rulefile::ItemSetSeq,
+    ) -> Result<Vec<FonSet>> {
+        let mut result = self.resolve_rule_item_set_seq(item_sets)?;
+        if result.len() == 1 && result[0] == FonSet::from(NO_FON) {
+            result.clear();
+        } else if !FonSet::seq_is_real(&result) {
+            return Err(InvalidMutationRule);
+        }
+        Ok(result)
     }
 
     fn resolve_norm_rule_lhs(&mut self, rule_lhs: &rulefile::ItemSetSeq) -> Result<Vec<Vec<char>>> {
