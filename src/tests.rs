@@ -958,3 +958,22 @@ fn test_mutation_rule_match_at_no_lookaround() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn test_mutation_rule_matcher_next_match() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let mut buf = Vec::new();
+    let input = &reg.setseq(&["a", "b", "c"])?;
+    let mut matcher = MutationRuleMatcher::new(&rule, &input, &mut buf);
+    assert_eq!(
+        matcher.next_match(),
+        Some(reg.setseq(&["cd", "b", "c"])?.as_slice())
+    );
+    assert_eq!(
+        matcher.next_match(),
+        Some(reg.setseq(&["a", "cd", "c"])?.as_slice())
+    );
+    assert_eq!(matcher.next_match(), None);
+    Ok(())
+}

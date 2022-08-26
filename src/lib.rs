@@ -544,6 +544,48 @@ impl MutationRule {
     }
 }
 
+struct MutationRuleMatcher<'a> {
+    rule: &'a MutationRule,
+    word: &'a [FonSet],
+    index: usize,
+    result_buf: &'a mut Vec<FonSet>,
+}
+
+impl<'a> MutationRuleMatcher<'a> {
+    fn new(
+        rule: &'a MutationRule,
+        word: &'a [FonSet],
+        result_buf: &'a mut Vec<FonSet>,
+    ) -> MutationRuleMatcher<'a> {
+        MutationRuleMatcher {
+            rule: rule,
+            word: word,
+            index: 0,
+            result_buf: result_buf,
+        }
+    }
+
+    fn next_match(&mut self) -> Option<&[FonSet]> {
+        while self.index < self.word.len() {
+            self.result_buf.clear();
+            let matched = self
+                .rule
+                .match_at_into(self.word, self.index, &mut self.result_buf);
+            self.index += 1;
+            if matched {
+                return Some(&self.result_buf);
+            }
+        }
+        None
+    }
+
+    fn for_each_match<F: FnMut(&[FonSet]) -> ()>(&mut self, mut f: F) {
+        while let Some(result) = self.next_match() {
+            f(&result);
+        }
+    }
+}
+
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
