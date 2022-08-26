@@ -965,15 +965,50 @@ fn test_mutation_rule_matcher_next_match() -> Result<()> {
     let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
     let mut buf = Vec::new();
     let input = &reg.setseq(&["a", "b", "c"])?;
-    let mut matcher = MutationRuleMatcher::new(&rule, &input, &mut buf);
+    let mut matcher = MutationRuleMatcher::new(&rule, &input);
     assert_eq!(
-        matcher.next_match(),
+        matcher.next_match(&mut buf),
         Some(reg.setseq(&["cd", "b", "c"])?.as_slice())
     );
     assert_eq!(
-        matcher.next_match(),
+        matcher.next_match(&mut buf),
         Some(reg.setseq(&["a", "cd", "c"])?.as_slice())
     );
-    assert_eq!(matcher.next_match(), None);
+    assert_eq!(matcher.next_match(&mut buf), None);
+    Ok(())
+}
+
+#[test]
+fn test_mutation_rule_set_add_iter() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let mut rule_set = MutationRuleSet::new();
+    let cost: Cost = 3;
+    rule_set.add_rule(rule.clone(), cost);
+    assert_eq!(Vec::from_iter(rule_set.iter()), vec![(cost, &rule)]);
+    Ok(())
+}
+
+#[test]
+fn test_mutation_rule_set_cost_sorted() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let rule1 = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let cost1: Cost = 3;
+    let rule2 = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let cost2: Cost = 5;
+    let mut rule_set = MutationRuleSet::new();
+    rule_set.add_rule(rule1.clone(), cost1);
+    rule_set.add_rule(rule2.clone(), cost2);
+    assert_eq!(
+        Vec::from_iter(rule_set.iter()),
+        vec![(cost1, &rule1), (cost2, &rule2)]
+    );
+    let mut rule_set = MutationRuleSet::new();
+    rule_set.add_rule(rule2.clone(), cost2);
+    rule_set.add_rule(rule1.clone(), cost1);
+    assert_eq!(
+        Vec::from_iter(rule_set.iter()),
+        vec![(cost1, &rule1), (cost2, &rule2)]
+    );
     Ok(())
 }

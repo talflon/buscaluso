@@ -542,45 +542,45 @@ impl MutationRule {
             None
         }
     }
+
+    fn matcher<'a>(&'a self, word: &'a [FonSet]) -> MutationRuleMatcher<'a> {
+        MutationRuleMatcher::new(&self, word)
+    }
 }
 
 struct MutationRuleMatcher<'a> {
     rule: &'a MutationRule,
     word: &'a [FonSet],
     index: usize,
-    result_buf: &'a mut Vec<FonSet>,
 }
 
 impl<'a> MutationRuleMatcher<'a> {
-    fn new(
-        rule: &'a MutationRule,
-        word: &'a [FonSet],
-        result_buf: &'a mut Vec<FonSet>,
-    ) -> MutationRuleMatcher<'a> {
+    fn new(rule: &'a MutationRule, word: &'a [FonSet]) -> MutationRuleMatcher<'a> {
         MutationRuleMatcher {
             rule: rule,
             word: word,
             index: 0,
-            result_buf: result_buf,
         }
     }
 
-    fn next_match(&mut self) -> Option<&[FonSet]> {
+    fn next_match<'b>(&mut self, result_buf: &'b mut Vec<FonSet>) -> Option<&'b [FonSet]> {
         while self.index < self.word.len() {
-            self.result_buf.clear();
-            let matched = self
-                .rule
-                .match_at_into(self.word, self.index, &mut self.result_buf);
+            result_buf.clear();
+            let matched = self.rule.match_at_into(self.word, self.index, result_buf);
             self.index += 1;
             if matched {
-                return Some(&self.result_buf);
+                return Some(result_buf.as_slice());
             }
         }
         None
     }
 
-    fn for_each_match<F: FnMut(&[FonSet]) -> ()>(&mut self, mut f: F) {
-        while let Some(result) = self.next_match() {
+    fn for_each_match<F: FnMut(&[FonSet]) -> ()>(
+        &mut self,
+        mut f: F,
+        result_buf: &mut Vec<FonSet>,
+    ) {
+        while let Some(result) = self.next_match(result_buf) {
             f(&result);
         }
     }
@@ -589,15 +589,78 @@ impl<'a> MutationRuleMatcher<'a> {
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
-struct MutationRuleSet {}
+struct MutationRuleSet {
+    costs: Vec<Cost>,
+    rules: Vec<Vec<MutationRule>>,
+}
 
 impl MutationRuleSet {
     fn new() -> MutationRuleSet {
-        MutationRuleSet {}
+        MutationRuleSet {
+            costs: Vec::new(),
+            rules: Vec::new(),
+        }
+    }
+
+    fn add_cost_idx(&mut self, cost: Cost) -> usize {
+        match self.costs.binary_search(&cost) {
+            Ok(idx) => idx,
+            Err(idx) => {
+                self.costs.insert(idx, cost);
+                self.rules.insert(idx, Vec::new());
+                idx
+            }
+        }
     }
 
     fn add_rule(&mut self, rule: MutationRule, cost: Cost) {
-        eprintln!("TODO add to MutationRuleSet: {:?} = {}", rule, cost);
+        let idx = self.add_cost_idx(cost);
+        self.rules[idx].push(rule);
+    }
+
+    fn iter(&self) -> MutationRuleSetIter {
+        MutationRuleSetIter {
+            rule_set: &self,
+            cost_idx: 0,
+            rule_idx: 0,
+        }
+    }
+}
+
+struct MutationRuleSetIter<'a> {
+    rule_set: &'a MutationRuleSet,
+    cost_idx: usize,
+    rule_idx: usize,
+}
+
+impl<'a> MutationRuleSetIter<'a> {
+    fn peek(&mut self) -> Option<(Cost, &'a MutationRule)> {
+        if self.cost_idx >= self.rule_set.costs.len() {
+            return None;
+        } else if self.rule_idx >= self.rule_set.rules[self.cost_idx].len() {
+            self.cost_idx += 1;
+            if self.cost_idx < self.rule_set.costs.len() {
+                self.rule_idx = 0;
+            } else {
+                return None;
+            }
+        }
+        Some((
+            self.rule_set.costs[self.cost_idx],
+            &self.rule_set.rules[self.cost_idx][self.rule_idx],
+        ))
+    }
+}
+
+impl<'a> Iterator for MutationRuleSetIter<'a> {
+    type Item = (Cost, &'a MutationRule);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.peek();
+        if result.is_some() {
+            self.rule_idx += 1;
+        }
+        result
     }
 }
 
