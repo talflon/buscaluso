@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::cmp::min;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::BufRead;
 use std::{io, iter};
 
@@ -59,7 +59,7 @@ pub const NO_FON: FonId = 0;
 
 pub const NO_FON_CHAR: char = '_';
 
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, PartialOrd, Ord)]
 pub struct FonSet {
     bits: u128,
 }
@@ -669,6 +669,23 @@ impl<'a> Iterator for MutationRuleSetIter<'a> {
             self.rule_idx += 1;
         }
         result
+    }
+}
+
+trait SliceSet<T> {
+    fn add_slice(&mut self, slice: &[T]);
+    fn has_slice(&self, slice: &[T]) -> bool;
+}
+
+impl<T: Ord + Copy> SliceSet<T> for BTreeSet<Box<[T]>> {
+    fn add_slice(&mut self, slice: &[T]) {
+        if !self.has_slice(slice) {
+            self.insert(slice.into());
+        }
+    }
+
+    fn has_slice(&self, slice: &[T]) -> bool {
+        self.contains(slice)
     }
 }
 

@@ -1017,3 +1017,26 @@ fn test_mutation_rule_set_cost_sorted() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn test_sliceset_with_fon_set_seq() -> Result<()> {
+    let mut set: BTreeSet<Box<[FonSet]>> = BTreeSet::new();
+    let mut reg = FonRegistry::new();
+    let setseq1 = reg.setseq(&["xy", "z"])?;
+    let setseq2 = reg.setseq(&["z", "ay"])?;
+    assert_eq!(set.has_slice(&setseq1), false);
+    assert_eq!(set.has_slice(&setseq2), false);
+    set.add_slice(&setseq1);
+    assert_eq!(set.has_slice(&setseq1), true);
+    assert_eq!(set.has_slice(&setseq2), false);
+    set.add_slice(&setseq1);
+    assert_eq!(set.has_slice(&setseq1), true);
+    assert_eq!(set.has_slice(&setseq2), false);
+    set.add_slice(&setseq2);
+    assert_eq!(set.has_slice(&setseq1), true);
+    assert_eq!(set.has_slice(&setseq2), true);
+    set.add_slice(&setseq1);
+    assert_eq!(set.has_slice(&setseq1), true);
+    assert_eq!(set.has_slice(&setseq2), true);
+    Ok(())
+}
