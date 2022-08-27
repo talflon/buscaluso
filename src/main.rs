@@ -53,33 +53,31 @@ fn main() -> Result<()> {
         eprintln!("done");
     }
 
-    match cli.word {
-        Some(word) => {
-            for result in cfg.search(&word) {
+    if let Some(word) = cli.word {
+        for result in cfg.search(&word) {
+            let (word, cost) = result?;
+            println!("{} ({})", word, cost);
+        }
+    } else {
+        // interactive mode
+        type SearchResult<'a> = Result<(&'a str, Cost)>;
+        let mut iter: Box<RefCell<dyn Iterator<Item = SearchResult>>> =
+            Box::new(RefCell::new(iter::empty()));
+        let mut line = String::new();
+        while io::stdin().read_line(&mut line)? > 0 {
+            let word = line.trim();
+            if cli.verbose >= 2 {
+                eprintln!("{:?}", word);
+            }
+            if !word.is_empty() {
+                iter = Box::new(RefCell::new(cfg.search(word)));
+            }
+            line.clear();
+            if let Some(result) = iter.borrow_mut().next() {
                 let (word, cost) = result?;
                 println!("{} ({})", word, cost);
-            }
-        }
-        None => {
-            // interactive mode
-            let mut iter: Box<RefCell<dyn Iterator<Item = Result<(&str, Cost)>>>> =
-                Box::new(RefCell::new(iter::empty()));
-            let mut line = String::new();
-            while io::stdin().read_line(&mut line)? > 0 {
-                let word = line.trim();
-                if cli.verbose >= 2 {
-                    eprintln!("{:?}", word);
-                }
-                if word.len() > 0 {
-                    iter = Box::new(RefCell::new(cfg.search(word)));
-                }
-                line.clear();
-                if let Some(result) = iter.borrow_mut().next() {
-                    let (word, cost) = result?;
-                    println!("{} ({})", word, cost);
-                } else if cli.verbose >= 2 {
-                    println!("(done)");
-                }
+            } else if cli.verbose >= 2 {
+                println!("(done)");
             }
         }
     }

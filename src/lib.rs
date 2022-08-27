@@ -89,7 +89,7 @@ impl FonSet {
 
     pub fn iter(&self) -> FonSetIter {
         FonSetIter {
-            fonset: self.clone(),
+            fonset: *self,
             index: 0,
         }
     }
@@ -338,6 +338,12 @@ impl FonRegistry {
     }
 }
 
+impl Default for FonRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FonRegistryMark(usize);
 
@@ -364,14 +370,23 @@ impl Normalizer for FonRegistry {
     }
 }
 
+type NormalizeRuleMap = BTreeMap<Box<[char]>, Box<[FonId]>>;
+
 #[derive(Debug, Clone)]
 pub struct NormalizeRuleSet {
-    rules: Vec<BTreeMap<Box<[char]>, Box<[FonId]>>>,
+    /// Stores rules per length of what to replace.
+    /// As no rules can replace an empty string, `rules[0]` is for length 1.
+    rules: Vec<NormalizeRuleMap>,
 }
 
 impl NormalizeRuleSet {
     fn new() -> NormalizeRuleSet {
-        NormalizeRuleSet { rules: Vec::new() }
+        NormalizeRuleSet {
+            rules: vec![BTreeMap::from([(
+                Box::from(&[NO_FON_CHAR] as &[char]),
+                Box::from(&[] as &[FonId]),
+            )])],
+        }
     }
 
     fn rule_len_idx(len: usize) -> usize {
@@ -422,8 +437,7 @@ impl<N: RuleBasedNormalizer> Normalizer for N {
             return Err(NoSuchFon(NO_FON_CHAR));
         }
         // surround input with NO_FON_CHAR to handle anchored normalization rules
-        let mut input: Vec<char> = Vec::new();
-        input.push(NO_FON_CHAR);
+        let mut input: Vec<char> = vec![NO_FON_CHAR];
         input.extend(prenormalized_chars(word));
         input.push(NO_FON_CHAR);
         // treat input as a mutable slice so we can easily drop from the front by reassigning
@@ -433,10 +447,8 @@ impl<N: RuleBasedNormalizer> Normalizer for N {
                 normalized.extend_from_slice(result);
                 input = &input[len..];
             } else {
-                // fall back to registry, to output a single char. but ignore end anchors
-                if input[0] != NO_FON_CHAR {
-                    normalized.push(self.fon_registry().get_id(input[0])?);
-                }
+                // fall back to registry, to output a single char.
+                normalized.push(self.fon_registry().get_id(input[0])?);
                 input = &input[1..];
             }
         }
@@ -544,7 +556,7 @@ impl MutationRule {
     }
 
     fn matcher<'a>(&'a self, word: &'a [FonSet]) -> MutationRuleMatcher<'a> {
-        MutationRuleMatcher::new(&self, word)
+        MutationRuleMatcher::new(self, word)
     }
 }
 
@@ -557,8 +569,8 @@ struct MutationRuleMatcher<'a> {
 impl<'a> MutationRuleMatcher<'a> {
     fn new(rule: &'a MutationRule, word: &'a [FonSet]) -> MutationRuleMatcher<'a> {
         MutationRuleMatcher {
-            rule: rule,
-            word: word,
+            rule,
+            word,
             index: 0,
         }
     }
@@ -575,13 +587,9 @@ impl<'a> MutationRuleMatcher<'a> {
         None
     }
 
-    fn for_each_match<F: FnMut(&[FonSet]) -> ()>(
-        &mut self,
-        mut f: F,
-        result_buf: &mut Vec<FonSet>,
-    ) {
+    fn for_each_match<F: FnMut(&[FonSet])>(&mut self, mut f: F, result_buf: &mut Vec<FonSet>) {
         while let Some(result) = self.next_match(result_buf) {
-            f(&result);
+            f(result);
         }
     }
 }
@@ -620,7 +628,7 @@ impl MutationRuleSet {
 
     fn iter(&self) -> MutationRuleSetIter {
         MutationRuleSetIter {
-            rule_set: &self,
+            rule_set: self,
             cost_idx: 0,
             rule_idx: 0,
         }
@@ -708,7 +716,7 @@ impl BuscaCfg {
                 let from_charsets = self.resolve_norm_rule_lhs(&from)?;
                 let to_fons = self.resolve_norm_rule_result(&to)?;
                 for_cartesian_product(&from_charsets, |from_chars| {
-                    self.normalize_rules.add_rule(&from_chars, &to_fons)
+                    self.normalize_rules.add_rule(from_chars, &to_fons)
                 })?;
             }
             Rule::Mut {
@@ -830,7 +838,7 @@ impl BuscaCfg {
     pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {
         match self.dictionary.get_mut(normalized) {
             Some(words) => {
-                if words.iter().find(|w| w.as_ref() == word).is_none() {
+                if !words.iter().any(|w| w.as_ref() == word) {
                     words.push(word.into());
                 }
             }
@@ -874,6 +882,12 @@ impl BuscaCfg {
             .into_iter()
             .flatten()
             .chain(items.into_iter().flatten())
+    }
+}
+
+impl Default for BuscaCfg {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

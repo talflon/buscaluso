@@ -359,11 +359,16 @@ fn test_dictionary_duplicate_two_keys() -> Result<()> {
 #[test]
 fn test_empty_ruleset() {
     let ruleset = NormalizeRuleSet::new();
-    assert_eq!(ruleset.longest_rule(), 0);
     assert_eq!(ruleset.get_rule(&['a']), None);
     assert_eq!(ruleset.get_rule(&['b', 'c']), None);
     assert_eq!(ruleset.find_rule(&['d']), None);
     assert_eq!(ruleset.find_rule(&['e', 'f']), None);
+}
+
+#[test]
+fn test_empty_ruleset_removes_end_anchors() {
+    let ruleset = NormalizeRuleSet::new();
+    assert_eq!(ruleset.get_rule(&[NO_FON_CHAR]), Some(&[] as &[_]));
 }
 
 #[test]
@@ -965,7 +970,7 @@ fn test_mutation_rule_matcher_next_match() -> Result<()> {
     let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
     let mut buf = Vec::new();
     let input = &reg.setseq(&["a", "b", "c"])?;
-    let mut matcher = MutationRuleMatcher::new(&rule, &input);
+    let mut matcher = MutationRuleMatcher::new(&rule, input);
     assert_eq!(
         matcher.next_match(&mut buf),
         Some(reg.setseq(&["cd", "b", "c"])?.as_slice())

@@ -58,9 +58,9 @@ impl<'a> fmt::Display for Item<'a> {
 
 pub fn item_set_seq_to_str(seq: &ItemSetSeq) -> String {
     seq.iter()
-        .map(|s| item_set_to_str(s))
+        .map(item_set_to_str)
         .reduce(|a, b| format!("{} {}", a, b))
-        .unwrap_or("".to_string())
+        .unwrap_or_default()
 }
 
 pub fn item_set_to_str(seq: &ItemSet) -> String {
@@ -71,7 +71,7 @@ pub fn item_seq_to_str(seq: &ItemSeq) -> String {
     seq.iter()
         .map(|item| format!("{}", item))
         .reduce(|a, b| format!("{} {}", a, b))
-        .unwrap_or("".to_string())
+        .unwrap_or_default()
 }
 
 fn alias_name(input: &str) -> IRes<&str> {
@@ -143,11 +143,11 @@ fn mut_rule(input: &str) -> IRes<Rule> {
             opt(preceded(delimited(space0, char('|'), space0), item_set_seq)),
         )),
         |(cost, _, look_behind, before, _, after, look_ahead)| Rule::Mut {
-            cost: cost,
-            before: look_behind.unwrap_or_else(Vec::new),
+            cost,
+            before: look_behind.unwrap_or_default(),
             from: before,
             to: after,
-            after: look_ahead.unwrap_or_else(Vec::new),
+            after: look_ahead.unwrap_or_default(),
         },
     )(input)
 }
