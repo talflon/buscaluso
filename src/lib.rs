@@ -102,53 +102,19 @@ impl FonSet {
         Ok(result)
     }
 
-    pub fn seq_is_empty<S: AsRef<[FonSet]>>(seq: &S) -> bool {
+    pub fn seq_is_empty<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
         let slice = seq.as_ref();
         slice.is_empty() || slice.iter().any(|s| s.is_empty())
     }
 
-    pub fn seq_is_real<S: AsRef<[FonSet]>>(seq: &S) -> bool {
+    pub fn seq_is_real<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
         let slice = seq.as_ref();
         slice.is_empty() || slice.iter().all(|s| s.is_real())
     }
 
-    pub fn seq_is_valid<S: AsRef<[FonSet]>>(seq: &S) -> bool {
+    pub fn seq_is_valid<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
         let slice = seq.as_ref();
         slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
-    }
-
-    pub fn seq_match_at_into<P: AsRef<[FonSet]>, S: AsRef<[FonSet]>>(
-        pattern: &P,
-        seq: &S,
-        index: usize,
-        result: &mut Vec<FonSet>,
-    ) -> bool {
-        debug_assert!(result.is_empty());
-        let pattern_slice = pattern.as_ref();
-        let seq_slice = seq.as_ref();
-        if index + pattern_slice.len() > seq_slice.len() {
-            false
-        } else {
-            result.clear();
-            result.extend_from_slice(seq_slice);
-            for i in 0..pattern_slice.len() {
-                result[index + i] &= pattern_slice[i];
-            }
-            !FonSet::seq_is_empty(result)
-        }
-    }
-
-    pub fn seq_match_at<P: AsRef<[FonSet]>, S: AsRef<[FonSet]>>(
-        pattern: &P,
-        seq: &S,
-        index: usize,
-    ) -> Option<Vec<FonSet>> {
-        let mut result = Vec::new();
-        if Self::seq_match_at_into(pattern, seq, index, &mut result) {
-            Some(result)
-        } else {
-            None
-        }
     }
 }
 
@@ -468,6 +434,19 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
     }
 }
 
+trait SliceMatcher<T> {
+    fn for_each_match_using<F: FnMut(&mut Vec<T>, usize)>(
+        &self,
+        word: &[T],
+        action: F,
+        result_buf: &mut Vec<T>,
+    );
+
+    fn for_each_match<F: FnMut(&mut Vec<T>, usize)>(&self, word: &[T], action: F) {
+        self.for_each_match_using(word, action, &mut Vec::new());
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MutationRule {
     pattern: Box<[FonSet]>,
@@ -490,7 +469,7 @@ impl MutationRule {
         pattern.extend_from_slice(lookbehind);
         pattern.extend_from_slice(old_pattern);
         pattern.extend_from_slice(lookahead);
-        if !FonSet::seq_is_valid(&pattern) {
+        if pattern.is_empty() || !FonSet::seq_is_valid(&pattern) {
             return Err(InvalidMutationRule);
         }
         Ok(MutationRule {
@@ -532,65 +511,51 @@ impl MutationRule {
     fn get_remove_len(&self) -> usize {
         self.remove_len
     }
-
-    fn match_at_into(&self, word: &[FonSet], index: usize, result: &mut Vec<FonSet>) -> bool {
-        debug_assert!(result.is_empty());
-        if FonSet::seq_match_at_into(&self.pattern, &word, index, result) {
-            result.splice(
-                (index + self.get_remove_start())..(index + self.get_remove_end()),
-                self.get_new_pattern().iter().cloned(),
-            );
-            true
-        } else {
-            false
-        }
-    }
-
-    fn match_at(&self, word: &[FonSet], index: usize) -> Option<Vec<FonSet>> {
-        let mut result = Vec::new();
-        if self.match_at_into(word, index, &mut result) {
-            Some(result)
-        } else {
-            None
-        }
-    }
-
-    fn matcher<'a>(&'a self, word: &'a [FonSet]) -> MutationRuleMatcher<'a> {
-        MutationRuleMatcher::new(self, word)
-    }
 }
 
-struct MutationRuleMatcher<'a> {
-    rule: &'a MutationRule,
-    word: &'a [FonSet],
-    index: usize,
-}
-
-impl<'a> MutationRuleMatcher<'a> {
-    fn new(rule: &'a MutationRule, word: &'a [FonSet]) -> MutationRuleMatcher<'a> {
-        MutationRuleMatcher {
-            rule,
-            word,
-            index: 0,
-        }
-    }
-
-    fn next_match<'b>(&mut self, result_buf: &'b mut Vec<FonSet>) -> Option<&'b [FonSet]> {
-        while self.index < self.word.len() {
-            result_buf.clear();
-            let matched = self.rule.match_at_into(self.word, self.index, result_buf);
-            self.index += 1;
-            if matched {
-                return Some(result_buf.as_slice());
+impl<S: AsRef<[FonSet]>> SliceMatcher<FonSet> for S {
+    fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
+        &self,
+        word: &[FonSet],
+        mut action: F,
+        result_buf: &mut Vec<FonSet>,
+    ) {
+        let pattern = self.as_ref();
+        debug_assert!(!pattern.is_empty());
+        for word_idx in 0..(word.len() - pattern.len() + 1) {
+            let first = word[word_idx] & pattern[0];
+            if !first.is_empty() {
+                result_buf.clear();
+                result_buf.extend_from_slice(word);
+                for pattern_idx in 0..pattern.len() {
+                    result_buf[word_idx + pattern_idx] &= pattern[pattern_idx];
+                }
+                if !FonSet::seq_is_empty(&result_buf[word_idx..word_idx + pattern.len()]) {
+                    action(result_buf, word_idx);
+                }
             }
         }
-        None
     }
+}
 
-    fn for_each_match<F: FnMut(&[FonSet])>(&mut self, mut f: F, result_buf: &mut Vec<FonSet>) {
-        while let Some(result) = self.next_match(result_buf) {
-            f(result);
-        }
+impl SliceMatcher<FonSet> for MutationRule {
+    fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
+        &self,
+        word: &[FonSet],
+        mut action: F,
+        result_buf: &mut Vec<FonSet>,
+    ) {
+        self.pattern.for_each_match_using(
+            word,
+            |result_buf, index| {
+                result_buf.splice(
+                    (index + self.get_remove_start())..(index + self.get_remove_end()),
+                    self.get_new_pattern().iter().cloned(),
+                );
+                action(result_buf, index);
+            },
+            result_buf,
+        );
     }
 }
 
@@ -598,13 +563,47 @@ pub type Cost = i32;
 
 #[derive(Debug, Clone)]
 struct MutationRuleSet {
-    costs: Vec<Cost>,
-    rules: Vec<Vec<MutationRule>>,
+    rules: Vec<MutationRule>,
 }
 
 impl MutationRuleSet {
     fn new() -> MutationRuleSet {
-        MutationRuleSet {
+        MutationRuleSet { rules: Vec::new() }
+    }
+
+    fn add_rule(&mut self, rule: MutationRule) {
+        self.rules.push(rule);
+    }
+}
+
+impl Default for MutationRuleSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SliceMatcher<FonSet> for MutationRuleSet {
+    fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
+        &self,
+        word: &[FonSet],
+        mut action: F,
+        result_buf: &mut Vec<FonSet>,
+    ) {
+        for rule in &self.rules {
+            rule.for_each_match_using(word, &mut action, result_buf);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct MutationRuleCostSet {
+    costs: Vec<Cost>,
+    rules: Vec<MutationRuleSet>,
+}
+
+impl MutationRuleCostSet {
+    fn new() -> MutationRuleCostSet {
+        MutationRuleCostSet {
             costs: Vec::new(),
             rules: Vec::new(),
         }
@@ -615,7 +614,7 @@ impl MutationRuleSet {
             Ok(idx) => idx,
             Err(idx) => {
                 self.costs.insert(idx, cost);
-                self.rules.insert(idx, Vec::new());
+                self.rules.insert(idx, MutationRuleSet::new());
                 idx
             }
         }
@@ -623,52 +622,7 @@ impl MutationRuleSet {
 
     fn add_rule(&mut self, rule: MutationRule, cost: Cost) {
         let idx = self.add_cost_idx(cost);
-        self.rules[idx].push(rule);
-    }
-
-    fn iter(&self) -> MutationRuleSetIter {
-        MutationRuleSetIter {
-            rule_set: self,
-            cost_idx: 0,
-            rule_idx: 0,
-        }
-    }
-}
-
-struct MutationRuleSetIter<'a> {
-    rule_set: &'a MutationRuleSet,
-    cost_idx: usize,
-    rule_idx: usize,
-}
-
-impl<'a> MutationRuleSetIter<'a> {
-    fn peek(&mut self) -> Option<(Cost, &'a MutationRule)> {
-        if self.cost_idx >= self.rule_set.costs.len() {
-            return None;
-        } else if self.rule_idx >= self.rule_set.rules[self.cost_idx].len() {
-            self.cost_idx += 1;
-            if self.cost_idx < self.rule_set.costs.len() {
-                self.rule_idx = 0;
-            } else {
-                return None;
-            }
-        }
-        Some((
-            self.rule_set.costs[self.cost_idx],
-            &self.rule_set.rules[self.cost_idx][self.rule_idx],
-        ))
-    }
-}
-
-impl<'a> Iterator for MutationRuleSetIter<'a> {
-    type Item = (Cost, &'a MutationRule);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let result = self.peek();
-        if result.is_some() {
-            self.rule_idx += 1;
-        }
-        result
+        self.rules[idx].add_rule(rule);
     }
 }
 
@@ -695,7 +649,7 @@ pub struct BuscaCfg {
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
     normalize_rules: NormalizeRuleSet,
     aliases: BTreeMap<String, FonSet>,
-    mutation_rules: MutationRuleSet,
+    mutation_rules: MutationRuleCostSet,
 }
 
 impl BuscaCfg {
@@ -705,7 +659,7 @@ impl BuscaCfg {
             dictionary: BTreeMap::new(),
             normalize_rules: NormalizeRuleSet::new(),
             aliases: BTreeMap::new(),
-            mutation_rules: MutationRuleSet::new(),
+            mutation_rules: MutationRuleCostSet::new(),
         }
     }
 

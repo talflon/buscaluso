@@ -240,29 +240,59 @@ fn test_fonsetseq_valid() {
     );
 }
 
-#[test]
-fn test_fonsetseq_match_at_in_bounds() {
-    let seq1: &[FonSet] = &[[2, 4].into(), [1, 2, 3].into()];
-    let seq2: &[FonSet] = &[[2, 5].into()];
-    assert_eq!(
-        FonSet::seq_match_at(&seq2, &seq1, 0),
-        Some(vec![2.into(), [1, 2, 3].into()])
-    );
-    assert_eq!(
-        FonSet::seq_match_at(&seq2, &seq1, 1),
-        Some(vec![[2, 4].into(), 2.into()])
-    );
-    assert_eq!(FonSet::seq_match_at(&[81.into()], &seq1, 0), None);
-    assert_eq!(FonSet::seq_match_at(&[81.into()], &seq1, 1), None);
+fn collect_matches<M: SliceMatcher<FonSet>>(
+    matcher: &M,
+    word: &[FonSet],
+) -> Vec<(Vec<FonSet>, usize)> {
+    let mut results: Vec<(Vec<FonSet>, usize)> = Vec::new();
+    matcher.for_each_match(&word, |result, index| results.push((result.clone(), index)));
+    results
 }
 
 #[test]
-fn test_fonset_seq_match_at_out_of_bounds() {
-    assert_eq!(FonSet::seq_match_at(&[], &[], 1), None);
+fn test_fon_set_seq_for_each_match_start() -> Result<()> {
+    let mut reg = FonRegistry::new();
     assert_eq!(
-        FonSet::seq_match_at(&[[32, 0].into()], &[[90, 0, 1].into()], 1),
-        None
+        collect_matches(&reg.setseq(&["a"])?, &reg.setseq(&["ax", "bx"])?),
+        vec![(reg.setseq(&["a", "bx"])?, 0),]
     );
+    Ok(())
+}
+
+#[test]
+fn test_fon_set_seq_for_each_match_end() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        collect_matches(&reg.setseq(&["b"])?, &reg.setseq(&["ax", "bx"])?),
+        vec![(reg.setseq(&["ax", "b"])?, 1),]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fon_set_seq_for_each_match_middle() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        collect_matches(&reg.setseq(&["b"])?, &reg.setseq(&["ax", "bx", "cx"])?),
+        vec![(reg.setseq(&["ax", "b", "cx"])?, 1),]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fon_set_seq_for_each_match_multiple() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        collect_matches(
+            &reg.setseq(&["ab", "c"])?,
+            &reg.setseq(&["r", "a", "cab", "cx", "na"])?
+        ),
+        vec![
+            (reg.setseq(&["r", "a", "c", "cx", "na"])?, 1),
+            (reg.setseq(&["r", "a", "ab", "c", "na"])?, 2),
+        ]
+    );
+    Ok(())
 }
 
 #[test]
@@ -909,7 +939,7 @@ fn test_mutation_rule_get_remove_len() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_match_at_with_lookarounds() -> Result<()> {
+fn test_mutation_rule_for_each_match_with_lookarounds() -> Result<()> {
     let mut reg = FonRegistry::new();
     let rule = MutationRule::create(
         &reg.setseq(&["ab", "cd"])?,
@@ -918,16 +948,16 @@ fn test_mutation_rule_match_at_with_lookarounds() -> Result<()> {
         &reg.setseq(&["a", "b"])?,
     )?;
     assert_eq!(
-        rule.match_at(&reg.setseq(&["h", "e", "l", "l", "o"])?, 2),
-        None
+        collect_matches(&rule, &reg.setseq(&["h", "e", "l", "l", "o"])?),
+        vec![]
     );
     assert_eq!(
-        rule.match_at(&reg.setseq(&["b", "c", "q", "a", "b"])?, 0),
-        Some(reg.setseq(&["b", "c", "o", "nr", "a", "b"])?)
+        collect_matches(&rule, &reg.setseq(&["b", "c", "q", "a", "b"])?),
+        vec![(reg.setseq(&["b", "c", "o", "nr", "a", "b"])?, 0),]
     );
     assert_eq!(
-        rule.match_at(&reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?, 1),
-        Some(reg.setseq(&["z", "b", "c", "o", "nr", "a", "b", "l"])?)
+        collect_matches(&rule, &reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?),
+        vec![(reg.setseq(&["z", "b", "c", "o", "nr", "a", "b", "l"])?, 1),]
     );
     Ok(())
 }
@@ -937,14 +967,13 @@ fn test_mutation_rule_match_at_simple() -> Result<()> {
     let mut reg = FonRegistry::new();
     let rule = MutationRule::create(&[], &reg.setseq(&["x"])?, &reg.setseq(&["y"])?, &[])?;
     assert_eq!(
-        rule.match_at(&reg.setseq(&["x"])?, 0),
-        Some(reg.setseq(&["y"])?)
+        collect_matches(&rule, &reg.setseq(&["x"])?),
+        vec![(reg.setseq(&["y"])?, 0),]
     );
-    assert_eq!(rule.match_at(&reg.setseq(&["z"])?, 0), None);
-    assert_eq!(rule.match_at(&reg.setseq(&["x"])?, 3), None);
+    assert_eq!(collect_matches(&rule, &reg.setseq(&["z"])?), vec![]);
     assert_eq!(
-        rule.match_at(&reg.setseq(&["xyz"])?, 0),
-        Some(reg.setseq(&["y"])?)
+        collect_matches(&rule, &reg.setseq(&["xyz"])?),
+        vec![(reg.setseq(&["y"])?, 0),]
     );
     Ok(())
 }
@@ -954,67 +983,24 @@ fn test_mutation_rule_match_at_no_lookaround() -> Result<()> {
     let mut reg = FonRegistry::new();
     let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
     assert_eq!(
-        rule.match_at(&reg.setseq(&["a", "b", "c"])?, 0),
-        Some(reg.setseq(&["cd", "b", "c"])?)
-    );
-    assert_eq!(
-        rule.match_at(&reg.setseq(&["a", "b", "c"])?, 1),
-        Some(reg.setseq(&["a", "cd", "c"])?)
+        collect_matches(&rule, &reg.setseq(&["a", "b", "c"])?),
+        vec![
+            (reg.setseq(&["cd", "b", "c"])?, 0),
+            (reg.setseq(&["a", "cd", "c"])?, 1),
+        ]
     );
     Ok(())
 }
 
 #[test]
-fn test_mutation_rule_matcher_next_match() -> Result<()> {
+fn test_mutation_rule_set_add() -> Result<()> {
     let mut reg = FonRegistry::new();
     let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
-    let mut buf = Vec::new();
-    let input = &reg.setseq(&["a", "b", "c"])?;
-    let mut matcher = MutationRuleMatcher::new(&rule, input);
-    assert_eq!(
-        matcher.next_match(&mut buf),
-        Some(reg.setseq(&["cd", "b", "c"])?.as_slice())
-    );
-    assert_eq!(
-        matcher.next_match(&mut buf),
-        Some(reg.setseq(&["a", "cd", "c"])?.as_slice())
-    );
-    assert_eq!(matcher.next_match(&mut buf), None);
-    Ok(())
-}
-
-#[test]
-fn test_mutation_rule_set_add_iter() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
-    let mut rule_set = MutationRuleSet::new();
+    let mut rule_set = MutationRuleCostSet::new();
     let cost: Cost = 3;
     rule_set.add_rule(rule.clone(), cost);
-    assert_eq!(Vec::from_iter(rule_set.iter()), vec![(cost, &rule)]);
-    Ok(())
-}
-
-#[test]
-fn test_mutation_rule_set_cost_sorted() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    let rule1 = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
-    let cost1: Cost = 3;
-    let rule2 = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
-    let cost2: Cost = 5;
-    let mut rule_set = MutationRuleSet::new();
-    rule_set.add_rule(rule1.clone(), cost1);
-    rule_set.add_rule(rule2.clone(), cost2);
-    assert_eq!(
-        Vec::from_iter(rule_set.iter()),
-        vec![(cost1, &rule1), (cost2, &rule2)]
-    );
-    let mut rule_set = MutationRuleSet::new();
-    rule_set.add_rule(rule2.clone(), cost2);
-    rule_set.add_rule(rule1.clone(), cost1);
-    assert_eq!(
-        Vec::from_iter(rule_set.iter()),
-        vec![(cost1, &rule1), (cost2, &rule2)]
-    );
+    let idx = rule_set.costs.iter().position(|&c| c == cost).unwrap();
+    assert!(rule_set.rules[idx].rules.contains(&rule));
     Ok(())
 }
 
