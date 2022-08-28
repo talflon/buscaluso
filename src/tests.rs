@@ -240,7 +240,7 @@ fn test_fonsetseq_valid() {
     );
 }
 
-fn collect_matches<M: SliceMatcher<FonSet>>(
+fn collect_matches<M: MutationRule<FonSet>>(
     matcher: &M,
     word: &[FonSet],
 ) -> Vec<(Vec<FonSet>, usize)> {
@@ -859,10 +859,10 @@ impl TestingFonRegistry for FonRegistry {
 }
 
 #[test]
-fn test_mutation_rule_get_lookbehind() -> Result<()> {
+fn test_replace_rule_get_lookbehind() -> Result<()> {
     let mut reg = FonRegistry::new();
     assert_eq!(
-        MutationRule::create(
+        ReplaceRule::create(
             &reg.setseq(&["ab", "cd"])?,
             &reg.setseq(&["q"])?,
             &reg.setseq(&["o", "nr"])?,
@@ -875,10 +875,10 @@ fn test_mutation_rule_get_lookbehind() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_get_lookahead() -> Result<()> {
+fn test_replace_rule_get_lookahead() -> Result<()> {
     let mut reg = FonRegistry::new();
     assert_eq!(
-        MutationRule::create(
+        ReplaceRule::create(
             &reg.setseq(&["ab", "cd"])?,
             &reg.setseq(&["q"])?,
             &reg.setseq(&["o", "nr"])?,
@@ -891,10 +891,10 @@ fn test_mutation_rule_get_lookahead() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_get_old_pattern() -> Result<()> {
+fn test_replace_rule_get_old_pattern() -> Result<()> {
     let mut reg = FonRegistry::new();
     assert_eq!(
-        MutationRule::create(
+        ReplaceRule::create(
             &reg.setseq(&["ab", "cd"])?,
             &reg.setseq(&["q"])?,
             &reg.setseq(&["o", "nr"])?,
@@ -907,10 +907,10 @@ fn test_mutation_rule_get_old_pattern() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_get_new_pattern() -> Result<()> {
+fn test_replace_rule_get_new_pattern() -> Result<()> {
     let mut reg = FonRegistry::new();
     assert_eq!(
-        MutationRule::create(
+        ReplaceRule::create(
             &reg.setseq(&["ab", "cd"])?,
             &reg.setseq(&["q"])?,
             &reg.setseq(&["o", "nr"])?,
@@ -923,10 +923,10 @@ fn test_mutation_rule_get_new_pattern() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_get_remove_len() -> Result<()> {
+fn test_replace_rule_get_remove_len() -> Result<()> {
     let mut reg = FonRegistry::new();
     assert_eq!(
-        MutationRule::create(
+        ReplaceRule::create(
             &reg.setseq(&["ab", "cd"])?,
             &reg.setseq(&["q"])?,
             &reg.setseq(&["o", "nr"])?,
@@ -939,9 +939,9 @@ fn test_mutation_rule_get_remove_len() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_for_each_match_with_lookarounds() -> Result<()> {
+fn test_replace_rule_for_each_match_with_lookarounds() -> Result<()> {
     let mut reg = FonRegistry::new();
-    let rule = MutationRule::create(
+    let rule = ReplaceRule::create(
         &reg.setseq(&["ab", "cd"])?,
         &reg.setseq(&["q"])?,
         &reg.setseq(&["o", "nr"])?,
@@ -963,9 +963,9 @@ fn test_mutation_rule_for_each_match_with_lookarounds() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_match_at_simple() -> Result<()> {
+fn test_replace_rule_match_at_simple() -> Result<()> {
     let mut reg = FonRegistry::new();
-    let rule = MutationRule::create(&[], &reg.setseq(&["x"])?, &reg.setseq(&["y"])?, &[])?;
+    let rule = ReplaceRule::create(&[], &reg.setseq(&["x"])?, &reg.setseq(&["y"])?, &[])?;
     assert_eq!(
         collect_matches(&rule, &reg.setseq(&["x"])?),
         vec![(reg.setseq(&["y"])?, 0),]
@@ -979,9 +979,9 @@ fn test_mutation_rule_match_at_simple() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_match_at_no_lookaround() -> Result<()> {
+fn test_replace_rule_match_at_no_lookaround() -> Result<()> {
     let mut reg = FonRegistry::new();
-    let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let rule = ReplaceRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
     assert_eq!(
         collect_matches(&rule, &reg.setseq(&["a", "b", "c"])?),
         vec![
@@ -993,10 +993,10 @@ fn test_mutation_rule_match_at_no_lookaround() -> Result<()> {
 }
 
 #[test]
-fn test_mutation_rule_set_add() -> Result<()> {
+fn test_replace_rule_set_add() -> Result<()> {
     let mut reg = FonRegistry::new();
-    let rule = MutationRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
-    let mut rule_set = MutationRuleCostSet::new();
+    let rule = ReplaceRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let mut rule_set = ReplaceRuleCostSet::new();
     let cost: Cost = 3;
     rule_set.add_rule(rule.clone(), cost);
     let idx = rule_set.costs.iter().position(|&c| c == cost).unwrap();

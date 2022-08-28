@@ -36,8 +36,8 @@ pub enum FonError {
     #[error("No such alias {0:?}")]
     NoSuchAlias(String),
 
-    #[error("Invalid mutation rule")]
-    InvalidMutationRule,
+    #[error("Invalid replace rule")]
+    InvalidReplaceRule,
 
     #[error("IO error {source:?}")]
     Io {
@@ -434,7 +434,7 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
     }
 }
 
-trait SliceMatcher<T> {
+trait MutationRule<T> {
     fn for_each_match_using<F: FnMut(&mut Vec<T>, usize)>(
         &self,
         word: &[T],
@@ -448,31 +448,31 @@ trait SliceMatcher<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct MutationRule {
+struct ReplaceRule {
     pattern: Box<[FonSet]>,
     remove_idx: usize,
     remove_len: usize,
     replace_with: Box<[FonSet]>,
 }
 
-impl MutationRule {
+impl ReplaceRule {
     fn create(
         lookbehind: &[FonSet],
         old_pattern: &[FonSet],
         new_pattern: &[FonSet],
         lookahead: &[FonSet],
-    ) -> Result<MutationRule> {
+    ) -> Result<ReplaceRule> {
         if !FonSet::seq_is_real(&new_pattern) {
-            return Err(InvalidMutationRule);
+            return Err(InvalidReplaceRule);
         }
         let mut pattern = Vec::new();
         pattern.extend_from_slice(lookbehind);
         pattern.extend_from_slice(old_pattern);
         pattern.extend_from_slice(lookahead);
         if pattern.is_empty() || !FonSet::seq_is_valid(&pattern) {
-            return Err(InvalidMutationRule);
+            return Err(InvalidReplaceRule);
         }
-        Ok(MutationRule {
+        Ok(ReplaceRule {
             pattern: pattern.into(),
             remove_idx: lookbehind.len(),
             remove_len: old_pattern.len(),
@@ -513,7 +513,7 @@ impl MutationRule {
     }
 }
 
-impl<S: AsRef<[FonSet]>> SliceMatcher<FonSet> for S {
+impl<S: AsRef<[FonSet]>> MutationRule<FonSet> for S {
     fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
         &self,
         word: &[FonSet],
@@ -538,7 +538,7 @@ impl<S: AsRef<[FonSet]>> SliceMatcher<FonSet> for S {
     }
 }
 
-impl SliceMatcher<FonSet> for MutationRule {
+impl MutationRule<FonSet> for ReplaceRule {
     fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
         &self,
         word: &[FonSet],
@@ -562,27 +562,27 @@ impl SliceMatcher<FonSet> for MutationRule {
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
-struct MutationRuleSet {
-    rules: Vec<MutationRule>,
+struct ReplaceRuleSet {
+    rules: Vec<ReplaceRule>,
 }
 
-impl MutationRuleSet {
-    fn new() -> MutationRuleSet {
-        MutationRuleSet { rules: Vec::new() }
+impl ReplaceRuleSet {
+    fn new() -> ReplaceRuleSet {
+        ReplaceRuleSet { rules: Vec::new() }
     }
 
-    fn add_rule(&mut self, rule: MutationRule) {
+    fn add_rule(&mut self, rule: ReplaceRule) {
         self.rules.push(rule);
     }
 }
 
-impl Default for MutationRuleSet {
+impl Default for ReplaceRuleSet {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SliceMatcher<FonSet> for MutationRuleSet {
+impl MutationRule<FonSet> for ReplaceRuleSet {
     fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
         &self,
         word: &[FonSet],
@@ -596,14 +596,14 @@ impl SliceMatcher<FonSet> for MutationRuleSet {
 }
 
 #[derive(Debug, Clone)]
-struct MutationRuleCostSet {
+struct ReplaceRuleCostSet {
     costs: Vec<Cost>,
-    rules: Vec<MutationRuleSet>,
+    rules: Vec<ReplaceRuleSet>,
 }
 
-impl MutationRuleCostSet {
-    fn new() -> MutationRuleCostSet {
-        MutationRuleCostSet {
+impl ReplaceRuleCostSet {
+    fn new() -> ReplaceRuleCostSet {
+        ReplaceRuleCostSet {
             costs: Vec::new(),
             rules: Vec::new(),
         }
@@ -614,13 +614,13 @@ impl MutationRuleCostSet {
             Ok(idx) => idx,
             Err(idx) => {
                 self.costs.insert(idx, cost);
-                self.rules.insert(idx, MutationRuleSet::new());
+                self.rules.insert(idx, ReplaceRuleSet::new());
                 idx
             }
         }
     }
 
-    fn add_rule(&mut self, rule: MutationRule, cost: Cost) {
+    fn add_rule(&mut self, rule: ReplaceRule, cost: Cost) {
         let idx = self.add_cost_idx(cost);
         self.rules[idx].add_rule(rule);
     }
@@ -649,7 +649,7 @@ pub struct BuscaCfg {
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
     normalize_rules: NormalizeRuleSet,
     aliases: BTreeMap<String, FonSet>,
-    mutation_rules: MutationRuleCostSet,
+    mutation_rules: ReplaceRuleCostSet,
 }
 
 impl BuscaCfg {
@@ -659,7 +659,7 @@ impl BuscaCfg {
             dictionary: BTreeMap::new(),
             normalize_rules: NormalizeRuleSet::new(),
             aliases: BTreeMap::new(),
-            mutation_rules: MutationRuleCostSet::new(),
+            mutation_rules: ReplaceRuleCostSet::new(),
         }
     }
 
@@ -702,11 +702,11 @@ impl BuscaCfg {
                 let to = self.resolve_mutation_item_set_seq(&to)?;
                 let lookahead = self.resolve_lookaround_item_set_seq(&after)?;
                 self.mutation_rules.add_rule(
-                    MutationRule::create(&lookbehind, &from, &to, &lookahead)?,
+                    ReplaceRule::create(&lookbehind, &from, &to, &lookahead)?,
                     cost,
                 );
                 self.mutation_rules.add_rule(
-                    MutationRule::create(&lookbehind, &to, &from, &lookahead)?,
+                    ReplaceRule::create(&lookbehind, &to, &from, &lookahead)?,
                     cost,
                 );
             }
@@ -778,7 +778,7 @@ impl BuscaCfg {
         if result.len() == 1 && result[0] == FonSet::from(NO_FON) {
             result.clear();
         } else if !FonSet::seq_is_real(&result) {
-            return Err(InvalidMutationRule);
+            return Err(InvalidReplaceRule);
         }
         Ok(result)
     }
