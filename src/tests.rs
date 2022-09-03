@@ -75,18 +75,18 @@ fn test_fonset_empty() {
 #[test]
 fn test_fonset_real() {
     let mut s = FonSet::new();
-    assert_eq!(s.is_real(), true);
+    assert!(s.is_real());
     s |= 12;
-    assert_eq!(s.is_real(), true);
+    assert!(s.is_real());
     s |= NO_FON;
-    assert_eq!(s.is_real(), false);
+    assert!(!s.is_real());
     s -= 12;
-    assert_eq!(s.is_real(), false);
+    assert!(!s.is_real());
     s |= 3;
     s |= 101;
-    assert_eq!(s.is_real(), false);
+    assert!(!s.is_real());
     s -= NO_FON;
-    assert_eq!(s.is_real(), true);
+    assert!(s.is_real());
 }
 
 #[test]
@@ -190,54 +190,108 @@ fn test_fonset_fons() -> Result<()> {
 
 #[test]
 fn test_fonsetseq_empty() {
-    assert_eq!(FonSet::seq_is_empty(&[]), true);
-    assert_eq!(FonSet::seq_is_empty(&[FonSet::EMPTY]), true);
-    assert_eq!(FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::EMPTY]), true);
-    assert_eq!(
-        FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::from(3)]),
-        true
-    );
-    assert_eq!(FonSet::seq_is_empty(&[2.into(), FonSet::EMPTY]), true);
-    assert_eq!(FonSet::seq_is_empty(&[2.into(), 3.into()]), false);
+    assert!(FonSet::seq_is_empty(&[]));
+    assert!(FonSet::seq_is_empty(&[FonSet::EMPTY]));
+    assert!(FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::EMPTY]));
+    assert!(FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::from(3)]));
+    assert!(FonSet::seq_is_empty(&[2.into(), FonSet::EMPTY]));
+    assert!(!FonSet::seq_is_empty(&[2.into(), 3.into()]));
 }
 
 #[test]
 fn test_fonsetseq_real() {
-    assert_eq!(FonSet::seq_is_real(&[]), true);
-    assert_eq!(FonSet::seq_is_real(&[FonSet::EMPTY]), true);
-    assert_eq!(FonSet::seq_is_real(&[FonSet::from(NO_FON)]), false);
-    assert_eq!(
-        FonSet::seq_is_real(&[FonSet::from([2, 3]), FonSet::from(NO_FON), FonSet::from(80)]),
-        false
-    );
-    assert_eq!(
-        FonSet::seq_is_real(&[FonSet::from([2, 3]), FonSet::EMPTY, FonSet::from(80)]),
-        true
-    );
+    assert!(FonSet::seq_is_real(&[]));
+    assert!(FonSet::seq_is_real(&[FonSet::EMPTY]));
+    assert!(!FonSet::seq_is_real(&[FonSet::from(NO_FON)]));
+    assert!(!FonSet::seq_is_real(&[
+        FonSet::from([2, 3]),
+        FonSet::from(NO_FON),
+        FonSet::from(80)
+    ]));
+    assert!(FonSet::seq_is_real(&[
+        FonSet::from([2, 3]),
+        FonSet::EMPTY,
+        FonSet::from(80)
+    ]));
 }
 
 #[test]
 fn test_fonsetseq_valid() {
-    assert_eq!(FonSet::seq_is_valid(&[]), true);
-    assert_eq!(FonSet::seq_is_valid(&[FonSet::EMPTY]), true);
-    assert_eq!(FonSet::seq_is_valid(&[FonSet::from(NO_FON)]), true);
-    assert_eq!(
-        FonSet::seq_is_valid(&[FonSet::from([2, 3]), FonSet::from(NO_FON), FonSet::from(80)]),
-        false
-    );
-    assert_eq!(
-        FonSet::seq_is_valid(&[FonSet::from([2, 3]), FonSet::EMPTY, FonSet::from(80)]),
-        true
-    );
-    assert_eq!(
-        FonSet::seq_is_valid(&[
-            FonSet::from(NO_FON),
-            FonSet::from([2, 3]),
-            FonSet::from(80),
-            FonSet::from(NO_FON)
-        ]),
-        true
-    );
+    assert!(FonSet::seq_is_valid(&[]));
+    assert!(FonSet::seq_is_valid(&[FonSet::EMPTY]));
+    assert!(FonSet::seq_is_valid(&[FonSet::from(NO_FON)]));
+    assert!(!FonSet::seq_is_valid(&[
+        FonSet::from([2, 3]),
+        FonSet::from(NO_FON),
+        FonSet::from(80)
+    ]));
+    assert!(FonSet::seq_is_valid(&[
+        FonSet::from([2, 3]),
+        FonSet::EMPTY,
+        FonSet::from(80)
+    ]));
+    assert!(FonSet::seq_is_valid(&[
+        FonSet::from(NO_FON),
+        FonSet::from([2, 3]),
+        FonSet::from(80),
+        FonSet::from(NO_FON)
+    ]));
+}
+
+#[test]
+fn test_fonset_first_id() {
+    assert_eq!(FonSet::EMPTY.first_id(), None);
+    assert_eq!(FonSet::from([17]).first_id(), Some(17));
+    assert_eq!(FonSet::from([5, 2, 99]).first_id(), Some(2));
+}
+
+#[test]
+fn test_fonset_next_id_after() {
+    assert_eq!(FonSet::from([17]).next_id_after(17), None);
+    assert_eq!(FonSet::from([5, 2, 99]).next_id_after(2), Some(5));
+    assert_eq!(FonSet::from([5, 2, 99]).next_id_after(5), Some(99));
+    assert_eq!(FonSet::from([5, 2, 99]).next_id_after(99), None);
+}
+
+#[test]
+fn test_fonset_next_id_after_same_as_iter() {
+    for fonset in [
+        FonSet::EMPTY,
+        FonSet::from([80]),
+        FonSet::from([1, 30, 105]),
+        FonSet::from(Vec::from_iter(0..MAX_FON_ID).as_slice()),
+    ] {
+        let by_iter: Vec<FonId> = fonset.iter().collect();
+        let mut by_next_id_after = Vec::new();
+        let mut current = fonset.first_id();
+        while let Some(id) = current {
+            by_next_id_after.push(id);
+            current = fonset.next_id_after(id);
+        }
+        assert_eq!(by_next_id_after, by_iter);
+    }
+}
+
+#[test]
+fn test_fonset_seq_for_each_fon_seq() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let mut seqs: Vec<Vec<FonId>> = Vec::new();
+    FonSet::seq_for_each_fon_seq(&reg.setseq(&["a"])?, |s| seqs.push(s.into()));
+    assert_eq!(seqs, vec![reg.seq("a")?]);
+    seqs.clear();
+    FonSet::seq_for_each_fon_seq(&reg.setseq(&["x", "abc", "bx"])?, |s| seqs.push(s.into()));
+    let mut expected = vec![
+        reg.seq("xab")?,
+        reg.seq("xbb")?,
+        reg.seq("xcb")?,
+        reg.seq("xax")?,
+        reg.seq("xbx")?,
+        reg.seq("xcx")?,
+    ];
+    seqs.sort();
+    expected.sort();
+    assert_eq!(seqs, expected);
+    Ok(())
 }
 
 fn collect_matches<M: MutationRule<FonSet>>(
@@ -245,7 +299,7 @@ fn collect_matches<M: MutationRule<FonSet>>(
     word: &[FonSet],
 ) -> Vec<(Vec<FonSet>, usize)> {
     let mut results: Vec<(Vec<FonSet>, usize)> = Vec::new();
-    matcher.for_each_match(&word, |result, index| results.push((result.clone(), index)));
+    matcher.for_each_match(word, |result, index| results.push((result.clone(), index)));
     results
 }
 
@@ -291,6 +345,34 @@ fn test_fon_set_seq_for_each_match_multiple() -> Result<()> {
             (reg.setseq(&["r", "a", "c", "cx", "na"])?, 1),
             (reg.setseq(&["r", "a", "ab", "c", "na"])?, 2),
         ]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fon_set_seq_for_each_match_no_match() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        collect_matches(&reg.setseq(&["n"])?, &reg.setseq(&["a", "b"])?),
+        vec![]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fon_set_seq_for_each_match_longer_pattern() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        collect_matches(&reg.setseq(&["a", "b", "c"])?, &reg.setseq(&["a", "b"])?),
+        vec![]
+    );
+    assert_eq!(
+        collect_matches(&reg.setseq(&["a", "b", "c"])?, &reg.setseq(&["b", "c"])?),
+        vec![]
+    );
+    assert_eq!(
+        collect_matches(&reg.setseq(&["a", "b", "c"])?, &reg.setseq(&["a"])?),
+        vec![]
     );
     Ok(())
 }
@@ -603,35 +685,23 @@ fn test_buscacfg_normalize() -> Result<()> {
 }
 
 #[test]
-fn test_buscacfg_search_with_normalize() -> Result<()> {
-    let s = "word";
+fn test_buscacfg_search_word_in_dictionary_comes_first() -> Result<()> {
+    let word = "word";
     let mut cfg = BuscaCfg::new();
-    for c in s.chars() {
+    cfg.load_rules("10: x > y".as_bytes())?;
+    for c in word.chars() {
         cfg.fon_registry.add(c)?;
     }
-    cfg.add_to_dictionary(s, &cfg.normalize(s)?)?;
-    let result: Result<Vec<(&str, Cost)>> = cfg.search(s).collect();
-    assert_eq!(result?, vec![(s, 0)]);
+    cfg.add_to_dictionary(word, &cfg.normalize(word)?)?;
+    assert_eq!(cfg.search(word)?.flatten().next(), Some((word, 0)));
     Ok(())
 }
 
 #[test]
-fn test_buscacfg_search_normalize_error() {
-    let cfg = BuscaCfg::new();
-    assert!(matches!(cfg.search("anything").next(), Some(Err(_))));
-}
-
-#[test]
-fn test_buscacfg_search_with_normalize_for_not_present() -> Result<()> {
-    let s1 = "uma";
-    let s2 = "outra";
+fn test_buscacfg_search_normalize_error() -> Result<()> {
     let mut cfg = BuscaCfg::new();
-    for c in s1.chars().chain(s2.chars()) {
-        cfg.fon_registry.add(c)?;
-    }
-    cfg.add_to_dictionary(s1, &cfg.normalize(s1)?)?;
-    let result: Result<Vec<(&str, Cost)>> = cfg.search(s2).collect();
-    assert_eq!(result?, vec![]);
+    cfg.load_rules("10: x > y".as_bytes())?;
+    assert!(matches!(cfg.search("anything"), Err(NoSuchFon(_))));
     Ok(())
 }
 
@@ -938,58 +1008,210 @@ fn test_replace_rule_get_remove_len() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_replace_rule_for_each_match_with_lookarounds() -> Result<()> {
+fn check_replace_rule_for_each_match_with_lookarounds<F, M>(get_matcher: F) -> Result<()>
+where
+    F: FnOnce(ReplaceRule) -> M,
+    M: MutationRule<FonSet>,
+{
     let mut reg = FonRegistry::new();
-    let rule = ReplaceRule::create(
+    let matcher = get_matcher(ReplaceRule::create(
         &reg.setseq(&["ab", "cd"])?,
         &reg.setseq(&["q"])?,
         &reg.setseq(&["o", "nr"])?,
         &reg.setseq(&["a", "b"])?,
-    )?;
+    )?);
     assert_eq!(
-        collect_matches(&rule, &reg.setseq(&["h", "e", "l", "l", "o"])?),
+        collect_matches(&matcher, &reg.setseq(&["h", "e", "l", "l", "o"])?),
         vec![]
     );
     assert_eq!(
-        collect_matches(&rule, &reg.setseq(&["b", "c", "q", "a", "b"])?),
+        collect_matches(&matcher, &reg.setseq(&["b", "c", "q", "a", "b"])?),
         vec![(reg.setseq(&["b", "c", "o", "nr", "a", "b"])?, 0),]
     );
     assert_eq!(
-        collect_matches(&rule, &reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?),
+        collect_matches(&matcher, &reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?),
         vec![(reg.setseq(&["z", "b", "c", "o", "nr", "a", "b", "l"])?, 1),]
     );
     Ok(())
 }
 
 #[test]
-fn test_replace_rule_match_at_simple() -> Result<()> {
+fn test_replace_rule_for_each_match_with_lookarounds() -> Result<()> {
+    check_replace_rule_for_each_match_with_lookarounds(|rule| rule)
+}
+
+fn replace_rule_set_of(rule: ReplaceRule) -> ReplaceRuleSet {
+    let mut rule_set = ReplaceRuleSet::new();
+    rule_set.add_rule(rule);
+    rule_set
+}
+
+#[test]
+fn test_replace_rule_set_for_each_match_with_lookarounds() -> Result<()> {
+    check_replace_rule_for_each_match_with_lookarounds(replace_rule_set_of)
+}
+
+fn check_replace_rule_for_each_match_simple<F, M>(get_matcher: F) -> Result<()>
+where
+    F: FnOnce(ReplaceRule) -> M,
+    M: MutationRule<FonSet>,
+{
     let mut reg = FonRegistry::new();
-    let rule = ReplaceRule::create(&[], &reg.setseq(&["x"])?, &reg.setseq(&["y"])?, &[])?;
+    let matcher = get_matcher(ReplaceRule::create(
+        &[],
+        &reg.setseq(&["x"])?,
+        &reg.setseq(&["y"])?,
+        &[],
+    )?);
     assert_eq!(
-        collect_matches(&rule, &reg.setseq(&["x"])?),
+        collect_matches(&matcher, &reg.setseq(&["x"])?),
         vec![(reg.setseq(&["y"])?, 0),]
     );
-    assert_eq!(collect_matches(&rule, &reg.setseq(&["z"])?), vec![]);
+    assert_eq!(collect_matches(&matcher, &reg.setseq(&["z"])?), vec![]);
     assert_eq!(
-        collect_matches(&rule, &reg.setseq(&["xyz"])?),
+        collect_matches(&matcher, &reg.setseq(&["xyz"])?),
         vec![(reg.setseq(&["y"])?, 0),]
     );
     Ok(())
 }
 
 #[test]
-fn test_replace_rule_match_at_no_lookaround() -> Result<()> {
+fn test_replace_rule_for_each_match_simple() -> Result<()> {
+    check_replace_rule_for_each_match_simple(|rule| rule)
+}
+
+#[test]
+fn test_replace_rule_set_for_each_match_simple() -> Result<()> {
+    check_replace_rule_for_each_match_simple(replace_rule_set_of)
+}
+
+fn check_replace_rule_for_each_match_no_lookaround<F, M>(get_matcher: F) -> Result<()>
+where
+    F: FnOnce(ReplaceRule) -> M,
+    M: MutationRule<FonSet>,
+{
     let mut reg = FonRegistry::new();
-    let rule = ReplaceRule::create(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+    let matcher = get_matcher(ReplaceRule::create(
+        &[],
+        &reg.setseq(&["ab"])?,
+        &reg.setseq(&["cd"])?,
+        &[],
+    )?);
     assert_eq!(
-        collect_matches(&rule, &reg.setseq(&["a", "b", "c"])?),
+        collect_matches(&matcher, &reg.setseq(&["a", "b", "c"])?),
         vec![
             (reg.setseq(&["cd", "b", "c"])?, 0),
             (reg.setseq(&["a", "cd", "c"])?, 1),
         ]
     );
     Ok(())
+}
+
+#[test]
+fn test_replace_rule_for_each_match_no_lookaround() -> Result<()> {
+    check_replace_rule_for_each_match_no_lookaround(|rule| rule)
+}
+
+#[test]
+fn test_replace_rule_set_for_each_match_no_lookaround() -> Result<()> {
+    check_replace_rule_for_each_match_no_lookaround(replace_rule_set_of)
+}
+
+fn check_replace_rule_for_each_match_anchor_front<F, M>(get_matcher: F) -> Result<()>
+where
+    F: FnOnce(ReplaceRule) -> M,
+    M: MutationRule<FonSet>,
+{
+    let mut reg = FonRegistry::new();
+    let matcher = get_matcher(ReplaceRule::create(
+        &[FonSet::from(NO_FON)],
+        &reg.setseq(&["ab"])?,
+        &reg.setseq(&["cd"])?,
+        &[],
+    )?);
+    assert_eq!(
+        collect_matches(&matcher, &reg.setseq(&["a", "b", "c"])?),
+        vec![(reg.setseq(&["cd", "b", "c"])?, 0),]
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_replace_rule_for_each_match_anchor_front() -> Result<()> {
+    check_replace_rule_for_each_match_anchor_front(|rule| rule)
+}
+
+#[test]
+#[ignore]
+fn test_replace_rule_set_for_each_match_anchor_front() -> Result<()> {
+    check_replace_rule_for_each_match_anchor_front(replace_rule_set_of)
+}
+
+fn check_replace_rule_for_each_match_anchor_end<F, M>(get_matcher: F) -> Result<()>
+where
+    F: FnOnce(ReplaceRule) -> M,
+    M: MutationRule<FonSet>,
+{
+    let mut reg = FonRegistry::new();
+    let matcher = get_matcher(ReplaceRule::create(
+        &[],
+        &reg.setseq(&["ab"])?,
+        &reg.setseq(&["cd"])?,
+        &[FonSet::from(NO_FON)],
+    )?);
+    assert_eq!(
+        collect_matches(&matcher, &reg.setseq(&["c", "a", "b"])?),
+        vec![(reg.setseq(&["c", "a", "cd"])?, 0),]
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_replace_rule_for_each_match_anchor_end() -> Result<()> {
+    check_replace_rule_for_each_match_anchor_end(|rule| rule)
+}
+
+#[test]
+#[ignore]
+fn test_replace_rule_set_for_each_match_anchor_end() -> Result<()> {
+    check_replace_rule_for_each_match_anchor_end(replace_rule_set_of)
+}
+
+fn check_replace_rule_for_each_match_anchor_both<F, M>(get_matcher: F) -> Result<()>
+where
+    F: FnOnce(ReplaceRule) -> M,
+    M: MutationRule<FonSet>,
+{
+    let mut reg = FonRegistry::new();
+    let matcher = get_matcher(ReplaceRule::create(
+        &[FonSet::from(NO_FON)],
+        &reg.setseq(&["ab"])?,
+        &reg.setseq(&["cd"])?,
+        &[FonSet::from(NO_FON)],
+    )?);
+    assert_eq!(
+        collect_matches(&matcher, &reg.setseq(&["c", "a", "b"])?),
+        vec![]
+    );
+    assert_eq!(
+        collect_matches(&matcher, &reg.setseq(&["b"])?),
+        vec![(reg.setseq(&["cd"])?, 0),]
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_replace_rule_for_each_match_anchor_both() -> Result<()> {
+    check_replace_rule_for_each_match_anchor_both(|rule| rule)
+}
+
+#[test]
+#[ignore]
+fn test_replace_rule_set_for_each_match_anchor_both() -> Result<()> {
+    check_replace_rule_for_each_match_anchor_both(replace_rule_set_of)
 }
 
 #[test]
@@ -1010,19 +1232,52 @@ fn test_sliceset_with_fon_set_seq() -> Result<()> {
     let mut reg = FonRegistry::new();
     let setseq1 = reg.setseq(&["xy", "z"])?;
     let setseq2 = reg.setseq(&["z", "ay"])?;
-    assert_eq!(set.has_slice(&setseq1), false);
-    assert_eq!(set.has_slice(&setseq2), false);
+    assert!(!set.has_slice(&setseq1));
+    assert!(!set.has_slice(&setseq2));
     set.add_slice(&setseq1);
-    assert_eq!(set.has_slice(&setseq1), true);
-    assert_eq!(set.has_slice(&setseq2), false);
+    assert!(set.has_slice(&setseq1));
+    assert!(!set.has_slice(&setseq2));
     set.add_slice(&setseq1);
-    assert_eq!(set.has_slice(&setseq1), true);
-    assert_eq!(set.has_slice(&setseq2), false);
+    assert!(set.has_slice(&setseq1));
+    assert!(!set.has_slice(&setseq2));
     set.add_slice(&setseq2);
-    assert_eq!(set.has_slice(&setseq1), true);
-    assert_eq!(set.has_slice(&setseq2), true);
+    assert!(set.has_slice(&setseq1));
+    assert!(set.has_slice(&setseq2));
     set.add_slice(&setseq1);
-    assert_eq!(set.has_slice(&setseq1), true);
-    assert_eq!(set.has_slice(&setseq2), true);
+    assert!(set.has_slice(&setseq1));
+    assert!(set.has_slice(&setseq2));
+    Ok(())
+}
+
+#[test]
+fn test_busca_node_inc_cost() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.load_rules("0: a > b".as_bytes())?;
+    cfg.load_rules("12: a > b".as_bytes())?;
+    cfg.load_rules("3: a > b".as_bytes())?;
+    cfg.load_rules("55: a > b".as_bytes())?;
+    let word = cfg.fon_registry.setseq(&["a"])?;
+    let mut node = BuscaNode::new(&cfg, &word, 0);
+    assert_eq!(node.total_cost, 0);
+    assert_eq!(node.inc_cost(&cfg), Some(3));
+    assert_eq!(node.inc_cost(&cfg), Some(12));
+    assert_eq!(node.inc_cost(&cfg), Some(55));
+    assert_eq!(node.inc_cost(&cfg), None);
+    Ok(())
+}
+
+#[test]
+fn test_busca_node_cmp() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.load_rules("0: a > b".as_bytes())?;
+    let word = cfg.fon_registry.setseq(&["a"])?;
+    let node1 = BuscaNode::new(&cfg, &word, 0);
+    let node2 = BuscaNode::new(&cfg, &word, 78);
+    assert!(node1 > node2);
+    assert!(node2 < node1);
+    assert!(node1 >= node1);
+    assert!(node1 <= node1);
+    assert!(node2 >= node2);
+    assert!(node2 <= node2);
     Ok(())
 }

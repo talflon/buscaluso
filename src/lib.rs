@@ -1,8 +1,8 @@
 use std::borrow::Borrow;
 use std::cmp::min;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::io;
 use std::io::BufRead;
-use std::{io, iter};
 
 use nom::Finish;
 use rulefile::Rule;
@@ -96,7 +96,7 @@ impl FonSet {
 
     pub fn fons(&self, reg: &FonRegistry) -> Result<Vec<char>> {
         let mut result: Vec<char> = Vec::new();
-        for i in self.iter() {
+        for i in self {
             result.push(reg.get_fon(i)?);
         }
         Ok(result)
@@ -116,6 +116,65 @@ impl FonSet {
         let slice = seq.as_ref();
         slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
     }
+
+    fn first_id(&self) -> Option<FonId> {
+        self.iter().next()
+    }
+
+    fn next_id_after(&self, mut id: FonId) -> Option<FonId> {
+        while id < MAX_FON_ID {
+            id += 1;
+            if self.contains(id) {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    pub fn seq_for_each_fon_seq<S, F>(seq: &S, mut action: F)
+    where
+        S: AsRef<[FonSet]> + ?Sized,
+        F: FnMut(&[FonId]),
+    {
+        let slice = seq.as_ref();
+        let mut buffer: Vec<FonId> = slice
+            .iter()
+            .map(|fonset| fonset.first_id().unwrap())
+            .collect();
+        loop {
+            action(&buffer);
+            for i in (0..slice.len()).rev() {
+                if let Some(id) = slice[i].next_id_after(buffer[i]) {
+                    buffer[i] = id;
+                    break;
+                } else if i == 0 {
+                    return;
+                } else {
+                    buffer[i] = slice[i].first_id().unwrap();
+                }
+            }
+        }
+    }
+
+    pub fn seq_from_fonseq<S: IntoIterator<Item = FonId>>(seq: S) -> Vec<FonSet> {
+        seq.into_iter().map(FonSet::from).collect()
+    }
+
+    fn seq_match_at_into<S: AsRef<[FonSet]>>(
+        pattern: S,
+        word: &[FonSet],
+        word_idx: usize,
+        result_buf: &mut Vec<FonSet>,
+    ) -> bool {
+        let pattern = pattern.as_ref();
+        debug_assert!(word_idx + pattern.len() <= word.len());
+        result_buf.clear();
+        result_buf.extend_from_slice(word);
+        for pattern_idx in 0..pattern.len() {
+            result_buf[word_idx + pattern_idx] &= pattern[pattern_idx];
+        }
+        !FonSet::seq_is_empty(&result_buf[word_idx..word_idx + pattern.len()])
+    }
 }
 
 impl From<FonId> for FonSet {
@@ -129,6 +188,16 @@ impl<const N: usize> From<[FonId; N]> for FonSet {
         let mut s = FonSet::new();
         for f in fons {
             s |= f;
+        }
+        s
+    }
+}
+
+impl From<&[FonId]> for FonSet {
+    fn from(fons: &[FonId]) -> Self {
+        let mut s = FonSet::new();
+        for f in fons {
+            s |= *f;
         }
         s
     }
@@ -234,6 +303,15 @@ impl Iterator for FonSetIter {
 }
 
 impl IntoIterator for FonSet {
+    type Item = FonId;
+    type IntoIter = FonSetIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl IntoIterator for &FonSet {
     type Item = FonId;
     type IntoIter = FonSetIter;
 
@@ -511,6 +589,25 @@ impl ReplaceRule {
     fn get_remove_len(&self) -> usize {
         self.remove_len
     }
+
+    fn is_start_anchored(&self) -> bool {
+        self.get_lookbehind()
+            .first()
+            .map_or(false, |s| s.contains(NO_FON))
+    }
+
+    fn is_end_anchored(&self) -> bool {
+        self.get_lookahead()
+            .last()
+            .map_or(false, |s| s.contains(NO_FON))
+    }
+
+    fn splice_into(&self, index: usize, result_buf: &mut Vec<FonSet>) {
+        result_buf.splice(
+            (index + self.get_remove_start())..(index + self.get_remove_end()),
+            self.get_new_pattern().iter().cloned(),
+        );
+    }
 }
 
 impl<S: AsRef<[FonSet]>> MutationRule<FonSet> for S {
@@ -521,16 +618,12 @@ impl<S: AsRef<[FonSet]>> MutationRule<FonSet> for S {
         result_buf: &mut Vec<FonSet>,
     ) {
         let pattern = self.as_ref();
-        debug_assert!(!pattern.is_empty());
-        for word_idx in 0..(word.len() - pattern.len() + 1) {
-            let first = word[word_idx] & pattern[0];
-            if !first.is_empty() {
-                result_buf.clear();
-                result_buf.extend_from_slice(word);
-                for pattern_idx in 0..pattern.len() {
-                    result_buf[word_idx + pattern_idx] &= pattern[pattern_idx];
-                }
-                if !FonSet::seq_is_empty(&result_buf[word_idx..word_idx + pattern.len()]) {
+        let pattern_first = pattern[0];
+        if pattern.len() <= word.len() {
+            for word_idx in 0..=(word.len() - pattern.len()) {
+                if !(word[word_idx] & pattern_first).is_empty()
+                    && FonSet::seq_match_at_into(pattern, word, word_idx, result_buf)
+                {
                     action(result_buf, word_idx);
                 }
             }
@@ -548,10 +641,7 @@ impl MutationRule<FonSet> for ReplaceRule {
         self.pattern.for_each_match_using(
             word,
             |result_buf, index| {
-                result_buf.splice(
-                    (index + self.get_remove_start())..(index + self.get_remove_end()),
-                    self.get_new_pattern().iter().cloned(),
-                );
+                self.splice_into(index, result_buf);
                 action(result_buf, index);
             },
             result_buf,
@@ -624,18 +714,24 @@ impl ReplaceRuleCostSet {
         let idx = self.add_cost_idx(cost);
         self.rules[idx].add_rule(rule);
     }
+
+    fn is_empty(&self) -> bool {
+        self.costs.is_empty()
+    }
 }
 
 trait SliceSet<T> {
-    fn add_slice(&mut self, slice: &[T]);
+    fn add_slice(&mut self, slice: &[T]) -> bool;
     fn has_slice(&self, slice: &[T]) -> bool;
 }
 
 impl<T: Ord + Copy> SliceSet<T> for BTreeSet<Box<[T]>> {
-    fn add_slice(&mut self, slice: &[T]) {
-        if !self.has_slice(slice) {
+    fn add_slice(&mut self, slice: &[T]) -> bool {
+        let is_new = !self.has_slice(slice);
+        if is_new {
             self.insert(slice.into());
         }
+        is_new
     }
 
     fn has_slice(&self, slice: &[T]) -> bool {
@@ -840,19 +936,11 @@ impl BuscaCfg {
             .flat_map(|v| v.iter().map(Box::borrow))
     }
 
-    pub fn search(&self, word: &str) -> impl Iterator<Item = Result<(&str, Cost)>> {
-        // initialize two optional iterators, depending on if we get a startup error
-        let (startup_err, items) = match self.normalize(word) {
-            Ok(normalized) => (None, Some(self.words_iter(&normalized).map(|w| Ok((w, 0))))),
-            Err(e) => (Some(iter::once(Err(e))), None),
-        };
-        // chain them together, using into_iter().flatten() to either extract or turn into an empty iterator
-        // this trick allows us to keep a consistent type of the final iterator
-        // trick from Niko Matsakis https://stackoverflow.com/a/52064434
-        startup_err
-            .into_iter()
-            .flatten()
-            .chain(items.into_iter().flatten())
+    pub fn search(&self, word: &str) -> Result<Busca> {
+        Ok(Busca::new(
+            self,
+            &FonSet::seq_from_fonseq(self.normalize(word)?),
+        ))
     }
 }
 
@@ -869,6 +957,137 @@ impl RuleBasedNormalizer for BuscaCfg {
 
     fn fon_registry(&self) -> &FonRegistry {
         &self.fon_registry
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuscaNode {
+    total_cost: Cost,
+    cost_idx: usize,
+    word: Box<[FonSet]>,
+}
+
+impl BuscaNode {
+    fn new(cfg: &BuscaCfg, word: &[FonSet], cost: Cost) -> BuscaNode {
+        BuscaNode {
+            total_cost: cost + cfg.mutation_rules.costs[0],
+            cost_idx: 0,
+            word: word.into(),
+        }
+    }
+
+    fn inc_cost(&mut self, cfg: &BuscaCfg) -> Option<Cost> {
+        let costs = &cfg.mutation_rules.costs;
+        let new_cost_idx = self.cost_idx + 1;
+        if new_cost_idx < costs.len() {
+            self.total_cost = self.total_cost - costs[self.cost_idx] + costs[new_cost_idx];
+            self.cost_idx = new_cost_idx;
+            Some(self.total_cost)
+        } else {
+            None
+        }
+    }
+}
+
+impl Ord for BuscaNode {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.total_cost.cmp(&self.total_cost)
+    }
+}
+
+impl PartialOrd for BuscaNode {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Busca<'a> {
+    cfg: &'a BuscaCfg,
+    already_visited: BTreeSet<Box<[FonSet]>>,
+    to_output: Vec<(&'a str, Cost)>,
+    already_output: BTreeSet<&'a str>,
+    current_node: Option<BuscaNode>,
+    later_nodes: BinaryHeap<BuscaNode>,
+}
+
+impl<'a> Busca<'a> {
+    fn new(cfg: &'a BuscaCfg, word: &[FonSet]) -> Busca<'a> {
+        let mut busca = Busca {
+            cfg,
+            current_node: Some(BuscaNode::new(cfg, word, 0)),
+            already_visited: BTreeSet::new(),
+            already_output: BTreeSet::new(),
+            to_output: Vec::new(),
+            later_nodes: BinaryHeap::new(),
+        };
+        busca.visit_fonsetseq(word, 0);
+        busca
+    }
+
+    fn search_current(&mut self) {
+        let mut current_node = self.current_node.take().unwrap();
+        self.cfg.mutation_rules.rules[current_node.cost_idx]
+            .for_each_match(&*current_node.word, |result, _| {
+                self.add_node(result, current_node.total_cost)
+            });
+        if let Some(new_cost) = current_node.inc_cost(self.cfg) {
+            if let Some(lowest_later_node) = self.later_nodes.peek() {
+                if new_cost > lowest_later_node.total_cost {
+                    self.current_node = self.later_nodes.pop();
+                    self.later_nodes.push(current_node);
+                } else {
+                    self.current_node = Some(current_node);
+                }
+            } else {
+                self.current_node = Some(current_node);
+            }
+        } else {
+            self.current_node = self.later_nodes.pop();
+        }
+    }
+
+    fn visit_fonsetseq(&mut self, word_fonsetseq: &[FonSet], cost: Cost) -> bool {
+        let is_new = self.already_visited.add_slice(word_fonsetseq);
+        if is_new {
+            FonSet::seq_for_each_fon_seq(word_fonsetseq, |word_fonseq| {
+                self.visit_fonseq(word_fonseq, cost)
+            });
+        }
+        is_new
+    }
+
+    fn visit_fonseq(&mut self, word_fonseq: &[FonId], cost: Cost) {
+        for word_str in self.cfg.words_iter(word_fonseq) {
+            self.visit_str(word_str, cost);
+        }
+    }
+
+    fn visit_str(&mut self, word_str: &'a str, cost: Cost) {
+        if self.already_output.insert(word_str) {
+            self.to_output.push((word_str, cost));
+        }
+    }
+
+    fn add_node(&mut self, word_fonsetseq: &[FonSet], cost: Cost) {
+        if self.visit_fonsetseq(word_fonsetseq, cost) {
+            self.later_nodes
+                .push(BuscaNode::new(self.cfg, word_fonsetseq, cost));
+        }
+    }
+}
+
+impl<'a> Iterator for Busca<'a> {
+    type Item = Option<(&'a str, Cost)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.to_output.is_empty() {
+            if self.current_node.is_none() {
+                return None;
+            }
+            self.search_current();
+        }
+        Some(self.to_output.pop())
     }
 }
 

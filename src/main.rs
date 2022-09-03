@@ -1,10 +1,8 @@
 use std::io::prelude::*;
 
-use std::cell::RefCell;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::iter;
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -54,15 +52,13 @@ fn main() -> Result<()> {
     }
 
     if let Some(word) = cli.word {
-        for result in cfg.search(&word) {
-            let (word, cost) = result?;
+        for result in cfg.search(&word)?.flatten() {
+            let (word, cost) = result;
             println!("{} ({})", word, cost);
         }
     } else {
         // interactive mode
-        type SearchResult<'a> = Result<(&'a str, Cost)>;
-        let mut iter: Box<RefCell<dyn Iterator<Item = SearchResult>>> =
-            Box::new(RefCell::new(iter::empty()));
+        let mut iter: Option<Busca> = None;
         let mut line = String::new();
         while io::stdin().read_line(&mut line)? > 0 {
             let word = line.trim();
@@ -70,14 +66,15 @@ fn main() -> Result<()> {
                 eprintln!("{:?}", word);
             }
             if !word.is_empty() {
-                iter = Box::new(RefCell::new(cfg.search(word)));
+                iter = Some(cfg.search(word)?);
             }
             line.clear();
-            if let Some(result) = iter.borrow_mut().next() {
-                let (word, cost) = result?;
-                println!("{} ({})", word, cost);
-            } else if cli.verbose >= 2 {
-                println!("(done)");
+            if let Some(ref mut iter) = iter {
+                if let Some((word, cost)) = iter.flatten().next() {
+                    println!("{} ({})", word, cost);
+                } else if cli.verbose >= 2 {
+                    println!("(done)");
+                }
             }
         }
     }
