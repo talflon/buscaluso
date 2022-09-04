@@ -512,72 +512,49 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
     }
 }
 
-trait MutationRule<T> {
-    fn for_each_match_using<F: FnMut(&mut Vec<T>, usize)>(
+trait MutationRule {
+    type T;
+
+    fn match_at_using<F: FnMut(&mut Vec<Self::T>)>(
         &self,
-        word: &[T],
+        word: &[Self::T],
+        word_idx: usize,
         action: F,
-        result_buf: &mut Vec<T>,
+        result_buf: &mut Vec<Self::T>,
     );
 
-    fn for_each_match<F: FnMut(&mut Vec<T>, usize)>(&self, word: &[T], action: F) {
+    fn match_at<F: FnMut(&mut Vec<Self::T>)>(&self, word: &[Self::T], word_idx: usize, action: F) {
+        self.match_at_using(word, word_idx, action, &mut Vec::new());
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+        &self,
+        word: &[Self::T],
+        action: F,
+        result_buf: &mut Vec<Self::T>,
+    );
+
+    fn for_each_match<F: FnMut(&mut Vec<Self::T>, usize)>(&self, word: &[Self::T], action: F) {
         self.for_each_match_using(word, action, &mut Vec::new());
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ReplaceRule {
-    pattern: Box<[FonSet]>,
+struct ReplaceRule<M>
+where
+    M: MutationRule,
+{
+    matcher: M,
     remove_idx: usize,
     remove_len: usize,
-    replace_with: Box<[FonSet]>,
+    replace_with: Box<[M::T]>,
 }
 
-impl ReplaceRule {
-    fn create(
-        lookbehind: &[FonSet],
-        old_pattern: &[FonSet],
-        new_pattern: &[FonSet],
-        lookahead: &[FonSet],
-    ) -> Result<ReplaceRule> {
-        if !FonSet::seq_is_real(&new_pattern) {
-            return Err(InvalidReplaceRule);
-        }
-        let mut pattern = Vec::new();
-        pattern.extend_from_slice(lookbehind);
-        pattern.extend_from_slice(old_pattern);
-        pattern.extend_from_slice(lookahead);
-        if pattern.is_empty() || !FonSet::seq_is_valid(&pattern) {
-            return Err(InvalidReplaceRule);
-        }
-        Ok(ReplaceRule {
-            pattern: pattern.into(),
-            remove_idx: lookbehind.len(),
-            remove_len: old_pattern.len(),
-            replace_with: new_pattern.into(),
-        })
-    }
-
-    fn get_pattern(&self) -> &[FonSet] {
-        &self.pattern
-    }
-
-    fn get_lookbehind(&self) -> &[FonSet] {
-        &self.pattern[..self.get_remove_start()]
-    }
-
-    fn get_lookahead(&self) -> &[FonSet] {
-        &self.pattern[self.get_remove_end()..]
-    }
-
-    fn get_old_pattern(&self) -> &[FonSet] {
-        &self.pattern[self.get_remove_start()..self.get_remove_end()]
-    }
-
-    fn get_new_pattern(&self) -> &[FonSet] {
-        &self.replace_with
-    }
-
+impl<M> ReplaceRule<M>
+where
+    M: MutationRule,
+    M::T: Clone,
+{
     fn get_remove_start(&self) -> usize {
         self.remove_idx
     }
@@ -590,27 +567,97 @@ impl ReplaceRule {
         self.remove_len
     }
 
-    fn is_start_anchored(&self) -> bool {
-        self.get_lookbehind()
-            .first()
-            .map_or(false, |s| s.contains(NO_FON))
-    }
-
-    fn is_end_anchored(&self) -> bool {
-        self.get_lookahead()
-            .last()
-            .map_or(false, |s| s.contains(NO_FON))
-    }
-
-    fn splice_into(&self, index: usize, result_buf: &mut Vec<FonSet>) {
+    fn splice_into(&self, index: usize, result_buf: &mut Vec<M::T>) {
         result_buf.splice(
             (index + self.get_remove_start())..(index + self.get_remove_end()),
-            self.get_new_pattern().iter().cloned(),
+            self.replace_with.iter().cloned(),
         );
     }
 }
 
-impl<S: AsRef<[FonSet]>> MutationRule<FonSet> for S {
+impl<M> MutationRule for ReplaceRule<M>
+where
+    M: MutationRule,
+    M::T: Clone,
+{
+    type T = M::T;
+
+    fn match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+        &self,
+        word: &[Self::T],
+        word_idx: usize,
+        mut action: F,
+        result_buf: &mut Vec<Self::T>,
+    ) {
+        self.matcher.match_at_using(
+            word,
+            word_idx,
+            |result_buf| {
+                self.splice_into(word_idx, result_buf);
+                action(result_buf)
+            },
+            result_buf,
+        );
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+        &self,
+        word: &[Self::T],
+        mut action: F,
+        result_buf: &mut Vec<Self::T>,
+    ) {
+        self.matcher.for_each_match_using(
+            word,
+            |result_buf, word_idx| {
+                self.splice_into(word_idx, result_buf);
+                action(result_buf, word_idx)
+            },
+            result_buf,
+        );
+    }
+}
+
+fn create_replace_rule(
+    lookbehind: &[FonSet],
+    old_pattern: &[FonSet],
+    new_pattern: &[FonSet],
+    lookahead: &[FonSet],
+) -> Result<MutRule> {
+    if !FonSet::seq_is_real(&new_pattern) {
+        return Err(InvalidReplaceRule);
+    }
+    let mut pattern = Vec::new();
+    pattern.extend_from_slice(lookbehind);
+    pattern.extend_from_slice(old_pattern);
+    pattern.extend_from_slice(lookahead);
+    if pattern.is_empty() || !FonSet::seq_is_valid(&pattern) {
+        return Err(InvalidReplaceRule);
+    }
+    Ok(ReplaceRule {
+        matcher: pattern.into(),
+        remove_idx: lookbehind.len(),
+        remove_len: old_pattern.len(),
+        replace_with: new_pattern.into(),
+    })
+}
+
+impl<S: AsRef<[FonSet]>> MutationRule for S {
+    type T = FonSet;
+
+    fn match_at_using<F: FnMut(&mut Vec<FonSet>)>(
+        &self,
+        word: &[FonSet],
+        word_idx: usize,
+        mut action: F,
+        result_buf: &mut Vec<FonSet>,
+    ) {
+        if self.as_ref().len() + word_idx <= word.len()
+            && FonSet::seq_match_at_into(self, word, word_idx, result_buf)
+        {
+            action(result_buf);
+        }
+    }
+
     fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
         &self,
         word: &[FonSet],
@@ -631,53 +678,57 @@ impl<S: AsRef<[FonSet]>> MutationRule<FonSet> for S {
     }
 }
 
-impl MutationRule<FonSet> for ReplaceRule {
-    fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
-        &self,
-        word: &[FonSet],
-        mut action: F,
-        result_buf: &mut Vec<FonSet>,
-    ) {
-        self.pattern.for_each_match_using(
-            word,
-            |result_buf, index| {
-                self.splice_into(index, result_buf);
-                action(result_buf, index);
-            },
-            result_buf,
-        );
-    }
-}
-
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
-struct ReplaceRuleSet {
-    rules: Vec<ReplaceRule>,
+struct ReplaceRuleSet<M: MutationRule> {
+    rules: Vec<M>,
 }
 
-impl ReplaceRuleSet {
-    fn new() -> ReplaceRuleSet {
+impl<M: MutationRule> ReplaceRuleSet<M> {
+    fn new() -> ReplaceRuleSet<M> {
         ReplaceRuleSet { rules: Vec::new() }
     }
 
-    fn add_rule(&mut self, rule: ReplaceRule) {
+    fn add_rule(&mut self, rule: M) {
         self.rules.push(rule);
     }
 }
 
-impl Default for ReplaceRuleSet {
+impl<M: MutationRule> Default for ReplaceRuleSet<M> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl MutationRule<FonSet> for ReplaceRuleSet {
-    fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
+impl<M: MutationRule> From<M> for ReplaceRuleSet<M> {
+    fn from(rule: M) -> Self {
+        let mut set = Self::new();
+        set.add_rule(rule);
+        set
+    }
+}
+
+impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
+    type T = M::T;
+
+    fn match_at_using<F: FnMut(&mut Vec<Self::T>)>(
         &self,
-        word: &[FonSet],
+        word: &[Self::T],
+        word_idx: usize,
         mut action: F,
-        result_buf: &mut Vec<FonSet>,
+        result_buf: &mut Vec<Self::T>,
+    ) {
+        for rule in &self.rules {
+            rule.match_at_using(word, word_idx, &mut action, result_buf);
+        }
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+        &self,
+        word: &[Self::T],
+        mut action: F,
+        result_buf: &mut Vec<Self::T>,
     ) {
         for rule in &self.rules {
             rule.for_each_match_using(word, &mut action, result_buf);
@@ -685,14 +736,16 @@ impl MutationRule<FonSet> for ReplaceRuleSet {
     }
 }
 
+type MutRule = ReplaceRule<Box<[FonSet]>>;
+
 #[derive(Debug, Clone)]
-struct ReplaceRuleCostSet {
+struct ReplaceRuleCostSet<M: MutationRule> {
     costs: Vec<Cost>,
-    rules: Vec<ReplaceRuleSet>,
+    rules: Vec<ReplaceRuleSet<M>>,
 }
 
-impl ReplaceRuleCostSet {
-    fn new() -> ReplaceRuleCostSet {
+impl<M: MutationRule> ReplaceRuleCostSet<M> {
+    fn new() -> ReplaceRuleCostSet<M> {
         ReplaceRuleCostSet {
             costs: Vec::new(),
             rules: Vec::new(),
@@ -710,7 +763,7 @@ impl ReplaceRuleCostSet {
         }
     }
 
-    fn add_rule(&mut self, rule: ReplaceRule, cost: Cost) {
+    fn add_rule(&mut self, rule: M, cost: Cost) {
         let idx = self.add_cost_idx(cost);
         self.rules[idx].add_rule(rule);
     }
@@ -745,7 +798,7 @@ pub struct BuscaCfg {
     dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
     normalize_rules: NormalizeRuleSet,
     aliases: BTreeMap<String, FonSet>,
-    mutation_rules: ReplaceRuleCostSet,
+    mutation_rules: ReplaceRuleCostSet<MutRule>,
 }
 
 impl BuscaCfg {
@@ -798,11 +851,11 @@ impl BuscaCfg {
                 let to = self.resolve_mutation_item_set_seq(&to)?;
                 let lookahead = self.resolve_lookaround_item_set_seq(&after)?;
                 self.mutation_rules.add_rule(
-                    ReplaceRule::create(&lookbehind, &from, &to, &lookahead)?,
+                    create_replace_rule(&lookbehind, &from, &to, &lookahead)?,
                     cost,
                 );
                 self.mutation_rules.add_rule(
-                    ReplaceRule::create(&lookbehind, &to, &from, &lookahead)?,
+                    create_replace_rule(&lookbehind, &to, &from, &lookahead)?,
                     cost,
                 );
             }
