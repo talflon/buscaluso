@@ -515,7 +515,7 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
 trait MutationRule {
     type T;
 
-    fn match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
         &self,
         word: &[Self::T],
         word_idx: usize,
@@ -523,16 +523,30 @@ trait MutationRule {
         result_buf: &mut Vec<Self::T>,
     );
 
-    fn match_at<F: FnMut(&mut Vec<Self::T>)>(&self, word: &[Self::T], word_idx: usize, action: F) {
-        self.match_at_using(word, word_idx, action, &mut Vec::new());
+    fn for_each_match_at<F: FnMut(&mut Vec<Self::T>)>(
+        &self,
+        word: &[Self::T],
+        word_idx: usize,
+        action: F,
+    ) {
+        self.for_each_match_at_using(word, word_idx, action, &mut Vec::new());
     }
 
     fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
         &self,
         word: &[Self::T],
-        action: F,
+        mut action: F,
         result_buf: &mut Vec<Self::T>,
-    );
+    ) {
+        for word_idx in 0..=word.len() {
+            self.for_each_match_at_using(
+                word,
+                word_idx,
+                |result_buf| action(result_buf, word_idx),
+                result_buf,
+            );
+        }
+    }
 
     fn for_each_match<F: FnMut(&mut Vec<Self::T>, usize)>(&self, word: &[Self::T], action: F) {
         self.for_each_match_using(word, action, &mut Vec::new());
@@ -582,14 +596,14 @@ where
 {
     type T = M::T;
 
-    fn match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
         &self,
         word: &[Self::T],
         word_idx: usize,
         mut action: F,
         result_buf: &mut Vec<Self::T>,
     ) {
-        self.matcher.match_at_using(
+        self.matcher.for_each_match_at_using(
             word,
             word_idx,
             |result_buf| {
@@ -644,7 +658,7 @@ fn create_replace_rule(
 impl<S: AsRef<[FonSet]>> MutationRule for S {
     type T = FonSet;
 
-    fn match_at_using<F: FnMut(&mut Vec<FonSet>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<FonSet>)>(
         &self,
         word: &[FonSet],
         word_idx: usize,
@@ -712,7 +726,7 @@ impl<M: MutationRule> From<M> for ReplaceRuleSet<M> {
 impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
     type T = M::T;
 
-    fn match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
         &self,
         word: &[Self::T],
         word_idx: usize,
@@ -720,7 +734,7 @@ impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
         result_buf: &mut Vec<Self::T>,
     ) {
         for rule in &self.rules {
-            rule.match_at_using(word, word_idx, &mut action, result_buf);
+            rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
         }
     }
 
@@ -817,9 +831,9 @@ impl BuscaCfg {
             match rulefile::rule_line(&line?).finish() {
                 Ok((_, Some(rule))) => self.add_rule(rule),
                 Ok((_, None)) => Ok(()),
-                Err(x) => Err(ParseErr {
+                Err(parse_err) => Err(ParseErr {
                     line_no: line_no + 1,
-                    text: x.input.to_owned(),
+                    text: parse_err.input.to_owned(),
                 }),
             }?;
         }

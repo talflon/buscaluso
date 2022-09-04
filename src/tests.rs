@@ -311,7 +311,7 @@ where
     M::T: Clone,
 {
     let mut results: Vec<Vec<M::T>> = Vec::new();
-    matcher.match_at(word, index, |result| results.push(result.clone()));
+    matcher.for_each_match_at(word, index, |result| results.push(result.clone()));
     results
 }
 
@@ -940,7 +940,7 @@ impl TestingFonRegistry for FonRegistry {
     }
 }
 
-fn check_replace_rule_match_at_with_lookarounds<F, M>(get_matcher: F) -> Result<()>
+fn check_replace_rule_for_each_match_at_with_lookarounds<F, M>(get_matcher: F) -> Result<()>
 where
     F: FnOnce(MutRule) -> M,
     M: MutationRule<T = FonSet>,
@@ -976,13 +976,13 @@ where
 }
 
 #[test]
-fn test_replace_rule_match_at_with_lookarounds() -> Result<()> {
-    check_replace_rule_match_at_with_lookarounds(identity)
+fn test_replace_rule_for_each_match_at_with_lookarounds() -> Result<()> {
+    check_replace_rule_for_each_match_at_with_lookarounds(identity)
 }
 
 #[test]
-fn test_replace_rule_set_match_at_with_lookarounds() -> Result<()> {
-    check_replace_rule_match_at_with_lookarounds(ReplaceRuleSet::from)
+fn test_replace_rule_set_for_each_match_at_with_lookarounds() -> Result<()> {
+    check_replace_rule_for_each_match_at_with_lookarounds(ReplaceRuleSet::from)
 }
 
 fn check_replace_rule_for_each_match_with_lookarounds<F, M>(get_matcher: F) -> Result<()>
