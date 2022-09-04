@@ -24,8 +24,8 @@ pub enum FonError {
     #[error("Ran out of fon ids")]
     NoMoreFonIds,
 
-    #[error("No such fon id {0}")]
-    NoSuchFonId(FonId),
+    #[error("No such fon id {0:?}")]
+    NoSuchFonId(u8),
 
     #[error("Already had a normalization rule for {0:?}")]
     DuplicateNormRule(Box<[char]>),
@@ -51,17 +51,37 @@ pub enum FonError {
 
 use FonError::*;
 
-const MAX_FON_ID: FonId = 127;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+#[repr(transparent)]
+pub struct FonId {
+    id: u8,
+}
 
-type FonId = u8;
+const MAX_FON_ID: u8 = 127;
 
-pub const NO_FON: FonId = 0;
+const MAX_FONS: usize = MAX_FON_ID as usize + 1;
+
+pub const NO_FON: FonId = FonId { id: 0 };
 
 pub const NO_FON_CHAR: char = '_';
 
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, PartialOrd, Ord, Hash)]
 pub struct FonSet {
     bits: u128,
+}
+
+impl From<u8> for FonId {
+    fn from(id: u8) -> Self {
+        debug_assert!(id <= MAX_FON_ID);
+        FonId { id }
+    }
+}
+
+impl From<usize> for FonId {
+    fn from(i: usize) -> Self {
+        debug_assert!(i < MAX_FONS);
+        FonId { id: i as u8 }
+    }
 }
 
 impl FonSet {
@@ -72,7 +92,7 @@ impl FonSet {
     }
 
     pub fn contains(&self, id: FonId) -> bool {
-        self.bits & (1 << id) != 0
+        self.bits & (1 << id.id) != 0
     }
 
     pub fn len(&self) -> usize {
@@ -104,7 +124,7 @@ impl FonSet {
 
     pub fn seq_is_empty<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
         let slice = seq.as_ref();
-        slice.is_empty() || slice.iter().any(|s| s.is_empty())
+        slice.is_empty() || slice.contains(&FonSet::EMPTY)
     }
 
     pub fn seq_is_real<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
@@ -122,8 +142,8 @@ impl FonSet {
     }
 
     fn next_id_after(&self, mut id: FonId) -> Option<FonId> {
-        while id < MAX_FON_ID {
-            id += 1;
+        while id.id < MAX_FON_ID {
+            id.id += 1;
             if self.contains(id) {
                 return Some(id);
             }
@@ -179,7 +199,7 @@ impl FonSet {
 
 impl From<FonId> for FonSet {
     fn from(id: FonId) -> Self {
-        FonSet { bits: 1 << id }
+        FonSet { bits: 1 << id.id }
     }
 }
 
@@ -293,7 +313,9 @@ impl Iterator for FonSetIter {
             // skip all zeros, get nonzero index, then move one past
             let zeros = self.fonset.bits.trailing_zeros();
             self.index += zeros as usize;
-            let item = Some(self.index as FonId);
+            let item = Some(FonId {
+                id: self.index as u8,
+            });
             self.fonset.bits >>= zeros;
             self.fonset.bits >>= 1;
             self.index += 1;
@@ -330,6 +352,16 @@ impl FromIterator<FonId> for FonSet {
     }
 }
 
+impl<'a> FromIterator<&'a FonId> for FonSet {
+    fn from_iter<I: IntoIterator<Item = &'a FonId>>(iter: I) -> Self {
+        let mut s = FonSet::new();
+        for &i in iter {
+            s |= i;
+        }
+        s
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FonRegistry {
     fons: Vec<char>,
@@ -346,10 +378,10 @@ impl FonRegistry {
         match self.try_get_id(fon) {
             Some(id) => Ok(id),
             None => {
-                let id = self.fons.len() as FonId;
-                if id <= MAX_FON_ID {
+                let id = self.fons.len();
+                if id < MAX_FONS {
                     self.fons.push(fon);
-                    Ok(id)
+                    Ok(FonId::from(id))
                 } else {
                     Err(NoMoreFonIds)
                 }
@@ -358,7 +390,7 @@ impl FonRegistry {
     }
 
     pub fn try_get_id(&self, fon: char) -> Option<FonId> {
-        self.fons.iter().position(|&f| f == fon).map(|i| i as FonId)
+        self.fons.iter().position(|&f| f == fon).map(FonId::from)
     }
 
     pub fn get_id(&self, fon: char) -> Result<FonId> {
@@ -366,11 +398,11 @@ impl FonRegistry {
     }
 
     pub fn try_get_fon(&self, id: FonId) -> Option<char> {
-        self.fons.get(id as usize).cloned()
+        self.fons.get(id.id as usize).cloned()
     }
 
     pub fn get_fon(&self, id: FonId) -> Result<char> {
-        self.try_get_fon(id).ok_or(NoSuchFonId(id))
+        self.try_get_fon(id).ok_or(NoSuchFonId(id.id))
     }
 
     pub fn mark(&self) -> FonRegistryMark {

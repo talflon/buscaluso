@@ -2,10 +2,37 @@ use super::*;
 
 use std::collections::BTreeSet;
 
-use quickcheck::{Arbitrary, TestResult};
+use quickcheck::{Arbitrary, QuickCheck, TestResult};
 use quickcheck_macros::*;
 
 use rulefile::Item;
+
+impl Arbitrary for FonId {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        FonId {
+            id: u8::arbitrary(g) % MAX_FON_ID,
+        }
+    }
+}
+
+impl Arbitrary for FonSet {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        FonSet {
+            bits: u128::arbitrary(g),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct SmallFonSet(FonSet);
+
+impl Arbitrary for SmallFonSet {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        SmallFonSet(FonSet {
+            bits: u16::arbitrary(g) as u128,
+        })
+    }
+}
 
 #[test]
 fn test_fon_registry_empty() {
@@ -14,7 +41,7 @@ fn test_fon_registry_empty() {
         assert!(matches!(reg.get_id(c), Err(NoSuchFon(c_)) if c_ == c));
     }
     for i in [1, 2, 35, MAX_FON_ID] {
-        assert!(matches!(reg.get_fon(i), Err(NoSuchFonId(i_)) if i_ == i));
+        assert!(matches!(reg.get_fon(FonId::from(i)), Err(NoSuchFonId(i_)) if i_ == i));
     }
 }
 
@@ -30,10 +57,10 @@ fn test_fon_registry_has_no_fon() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_fon_registry_add() -> Result<()> {
+#[quickcheck]
+fn test_fon_registry_add(chars: Vec<char>) -> Result<()> {
     let mut reg = FonRegistry::new();
-    for c in ['Z', 'Ç'] {
+    for c in chars {
         reg.add(c)?;
         assert_eq!(reg.get_fon(reg.get_id(c)?)?, c);
     }
@@ -71,7 +98,7 @@ fn test_fonset_empty() {
     assert!(s.is_empty());
     assert_eq!(s.len(), 0);
     for i in 0..=MAX_FON_ID {
-        assert!(!s.contains(i))
+        assert!(!s.contains(FonId::from(i)))
     }
 }
 
@@ -79,14 +106,14 @@ fn test_fonset_empty() {
 fn test_fonset_real() {
     let mut s = FonSet::new();
     assert!(s.is_real());
-    s |= 12;
+    s |= FonId::from(12u8);
     assert!(s.is_real());
     s |= NO_FON;
     assert!(!s.is_real());
-    s -= 12;
+    s -= FonId::from(12u8);
     assert!(!s.is_real());
-    s |= 3;
-    s |= 101;
+    s |= FonId::from(3u8);
+    s |= FonId::from(101u8);
     assert!(!s.is_real());
     s -= NO_FON;
     assert!(s.is_real());
@@ -107,70 +134,82 @@ fn test_fonset_new() {
 #[test]
 fn test_fonset_from_one_contains_it() {
     for i in 0..=MAX_FON_ID {
-        assert!(FonSet::from(i).contains(i));
+        assert!(FonSet::from(FonId::from(i)).contains(FonId::from(i)));
     }
 }
 
 #[test]
 fn test_fonset_from_one_only_contains_it() {
     for i in 0..=MAX_FON_ID {
-        let s = FonSet::from(i);
+        let s = FonSet::from(FonId::from(i));
         assert_eq!(s.len(), 1);
         assert!(!s.is_empty());
         for j in 0..=MAX_FON_ID {
             if i != j {
-                assert!(!s.contains(j));
+                assert!(!s.contains(FonId::from(j)));
             }
         }
     }
 }
 
-#[test]
-fn test_fonset_add_with_oreq() {
-    let mut s = FonSet::new();
-    s |= 3;
-    s |= 17;
-    s |= 1;
-    s |= 0;
-    s |= 4;
-    assert_eq!(s.len(), 5);
+#[quickcheck]
+fn test_fonset_or_fonid(set: FonSet, id: FonId) {
+    assert!((set | id).contains(id));
+    assert_eq!(set | id, set | FonSet::from(id));
 }
 
-#[test]
-fn test_fonset_subtract() {
-    let s = FonSet::from([100, 99]);
-    assert_eq!(s - 99, FonSet::from(100));
+#[quickcheck]
+fn test_fonset_oreq_fonid(set: FonSet, id: FonId) {
+    let mut set_copy = set;
+    set_copy |= id;
+    assert_eq!(set_copy, set | id);
 }
 
-#[test]
-fn test_oreq_subeq() {
-    let mut s = FonSet::EMPTY;
-    s |= 77;
-    s -= 77;
-    assert!(!s.contains(77));
-}
-
-#[test]
-fn test_fonset_from_to_iter() {
-    use std::collections::HashSet;
-    let hs: HashSet<FonId> = [50, 7, 12, 4].into();
-    let fs: FonSet = hs.iter().cloned().collect();
-    let fshs: HashSet<FonId> = fs.iter().collect();
-    assert_eq!(fshs, hs);
-    assert!(fs.contains(12));
-}
-
-#[test]
-fn test_fonset_iter() {
+#[quickcheck]
+fn test_fonset_or(set1: FonSet, set2: FonSet) {
+    let uni = set1 | set2;
     for i in 0..=MAX_FON_ID {
-        let v: Vec<FonId> = FonSet::from(i).iter().collect();
-        assert_eq!(v, vec![i]);
+        let id = FonId::from(i);
+        assert_eq!(set1.contains(id) || set2.contains(id), uni.contains(id));
     }
 }
 
-#[test]
-fn test_fonset_for_loop() {
-    let s1 = FonSet::from([0, 55, 3, 11, 8]);
+#[quickcheck]
+fn test_fonset_oreq(set: FonSet, other: FonSet) {
+    let mut set_copy = set;
+    set_copy |= other;
+    assert_eq!(set_copy, set | other);
+}
+
+#[quickcheck]
+fn test_fonset_sub_fonid(set: FonSet, id: FonId) {
+    assert!(!(set - id).contains(id));
+    assert_eq!(set - id, set - FonSet::from(id));
+}
+
+#[quickcheck]
+fn test_fonset_subeq_fonid(set: FonSet, id: FonId) {
+    let mut set_copy = set;
+    set_copy -= id;
+    assert_eq!(set_copy, set - id);
+}
+
+#[quickcheck]
+fn test_fonset_to_from_iter(fs: FonSet) {
+    use std::collections::HashSet;
+    let hs: HashSet<FonId> = fs.iter().collect();
+    assert_eq!(FonSet::from_iter(hs.iter()), fs);
+}
+
+#[quickcheck]
+fn test_fonset_iter(fon_ids: BTreeSet<FonId>) {
+    assert!(FonSet::from_iter(fon_ids.iter())
+        .iter()
+        .eq(fon_ids.iter().cloned()));
+}
+
+#[quickcheck]
+fn test_fonset_for_loop(s1: FonSet) {
     let mut s2: FonSet = FonSet::new();
     for i in s1 {
         s2 |= i;
@@ -191,14 +230,30 @@ fn test_fonset_fons() -> Result<()> {
     Ok(())
 }
 
+#[quickcheck]
+fn test_fonsetseq_empty_if_any_empty(mut setseq: Vec<FonSet>, index: usize) {
+    let index = index % (setseq.len() + 1);
+    setseq.insert(index, FonSet::EMPTY);
+    assert!(FonSet::seq_is_empty(&setseq));
+}
+
+#[quickcheck]
+fn test_fonsetseq_not_empty(setseq: Vec<FonSet>) -> TestResult {
+    for set in &setseq {
+        if set.is_empty() {
+            return TestResult::discard();
+        }
+    }
+    if setseq.is_empty() {
+        TestResult::discard()
+    } else {
+        TestResult::from_bool(!FonSet::seq_is_empty(&setseq))
+    }
+}
+
 #[test]
 fn test_fonsetseq_empty() {
     assert!(FonSet::seq_is_empty(&[]));
-    assert!(FonSet::seq_is_empty(&[FonSet::EMPTY]));
-    assert!(FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::EMPTY]));
-    assert!(FonSet::seq_is_empty(&[FonSet::EMPTY, FonSet::from(3)]));
-    assert!(FonSet::seq_is_empty(&[2.into(), FonSet::EMPTY]));
-    assert!(!FonSet::seq_is_empty(&[2.into(), 3.into()]));
 }
 
 #[test]
@@ -207,14 +262,14 @@ fn test_fonsetseq_real() {
     assert!(FonSet::seq_is_real(&[FonSet::EMPTY]));
     assert!(!FonSet::seq_is_real(&[FonSet::from(NO_FON)]));
     assert!(!FonSet::seq_is_real(&[
-        FonSet::from([2, 3]),
+        FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(NO_FON),
-        FonSet::from(80)
+        FonSet::from(FonId::from(80u8)),
     ]));
     assert!(FonSet::seq_is_real(&[
-        FonSet::from([2, 3]),
+        FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::EMPTY,
-        FonSet::from(80)
+        FonSet::from(FonId::from(80u8)),
     ]));
 }
 
@@ -224,55 +279,64 @@ fn test_fonsetseq_valid() {
     assert!(FonSet::seq_is_valid(&[FonSet::EMPTY]));
     assert!(FonSet::seq_is_valid(&[FonSet::from(NO_FON)]));
     assert!(!FonSet::seq_is_valid(&[
-        FonSet::from([2, 3]),
+        FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(NO_FON),
-        FonSet::from(80)
+        FonSet::from(FonId::from(80u8)),
     ]));
     assert!(FonSet::seq_is_valid(&[
-        FonSet::from([2, 3]),
+        FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::EMPTY,
-        FonSet::from(80)
+        FonSet::from(FonId::from(80u8)),
     ]));
     assert!(FonSet::seq_is_valid(&[
         FonSet::from(NO_FON),
-        FonSet::from([2, 3]),
-        FonSet::from(80),
+        FonSet::from([2u8.into(), 3u8.into()]),
+        FonSet::from(FonId::from(80u8)),
         FonSet::from(NO_FON)
     ]));
 }
 
 #[test]
-fn test_fonset_first_id() {
+fn test_fonset_empty_first_id() {
     assert_eq!(FonSet::EMPTY.first_id(), None);
-    assert_eq!(FonSet::from([17]).first_id(), Some(17));
-    assert_eq!(FonSet::from([5, 2, 99]).first_id(), Some(2));
 }
 
-#[test]
-fn test_fonset_next_id_after() {
-    assert_eq!(FonSet::from([17]).next_id_after(17), None);
-    assert_eq!(FonSet::from([5, 2, 99]).next_id_after(2), Some(5));
-    assert_eq!(FonSet::from([5, 2, 99]).next_id_after(5), Some(99));
-    assert_eq!(FonSet::from([5, 2, 99]).next_id_after(99), None);
+#[quickcheck]
+fn test_fonset_len1_first_id(id: FonId) {
+    assert_eq!(FonSet::from(id).first_id(), Some(id));
 }
 
-#[test]
-fn test_fonset_next_id_after_same_as_iter() {
-    for fonset in [
-        FonSet::EMPTY,
-        FonSet::from([80]),
-        FonSet::from([1, 30, 105]),
-        FonSet::from(Vec::from_iter(0..MAX_FON_ID).as_slice()),
-    ] {
-        let by_iter: Vec<FonId> = fonset.iter().collect();
-        let mut by_next_id_after = Vec::new();
-        let mut current = fonset.first_id();
-        while let Some(id) = current {
-            by_next_id_after.push(id);
-            current = fonset.next_id_after(id);
-        }
-        assert_eq!(by_next_id_after, by_iter);
+#[quickcheck]
+fn test_fonset_first_id(set: FonSet) {
+    assert_eq!(set.first_id(), set.iter().next());
+}
+
+#[quickcheck]
+fn test_fonset_next_id_after(set: FonSet) -> TestResult {
+    if set.is_empty() {
+        return TestResult::discard();
     }
+    let mut iter = set.iter();
+    let mut last = iter.next().unwrap();
+    for next in iter {
+        if set.next_id_after(last) != Some(next) {
+            return TestResult::failed();
+        }
+        last = next;
+    }
+    TestResult::passed()
+}
+
+#[quickcheck]
+fn test_fonset_next_id_after_same_as_iter(fonset: FonSet) {
+    let by_iter: Vec<FonId> = fonset.iter().collect();
+    let mut by_next_id_after = Vec::new();
+    let mut current = fonset.first_id();
+    while let Some(id) = current {
+        by_next_id_after.push(id);
+        current = fonset.next_id_after(id);
+    }
+    assert_eq!(by_next_id_after, by_iter);
 }
 
 #[test]
@@ -295,6 +359,50 @@ fn test_fonset_seq_for_each_fon_seq() -> Result<()> {
     expected.sort();
     assert_eq!(seqs, expected);
     Ok(())
+}
+
+#[test]
+fn test_fonset_seq_for_each_fon_seq_len() {
+    fn fonset_seq_for_each_fon_seq_len(seq: Vec<SmallFonSet>) -> TestResult {
+        let seq = Vec::from_iter(seq.iter().map(|SmallFonSet(s)| *s));
+        let expected_len: usize = seq.iter().map(FonSet::len).product();
+        if seq.is_empty() || expected_len == 0 || expected_len > 10_000 {
+            TestResult::discard()
+        } else {
+            let mut count: usize = 0;
+            FonSet::seq_for_each_fon_seq(&seq, |_| {
+                count += 1;
+            });
+            TestResult::from_bool(count == expected_len)
+        }
+    }
+    QuickCheck::new()
+        .gen(quickcheck::Gen::new(8))
+        .quickcheck(fonset_seq_for_each_fon_seq_len as fn(_) -> TestResult);
+}
+
+#[test]
+fn test_fonset_seq_for_each_fon_seq_contains_samples() {
+    fn fonset_seq_for_each_fon_seq_contains_samples(seq: Vec<SmallFonSet>) -> TestResult {
+        let seq = Vec::from_iter(seq.iter().map(|SmallFonSet(s)| *s));
+        let expected_len: usize = seq.iter().map(FonSet::len).product();
+        if seq.is_empty() || expected_len == 0 || expected_len > 10_000 {
+            TestResult::discard()
+        } else {
+            let mut looking_for = BTreeSet::new();
+            looking_for.insert(Vec::from_iter(seq.iter().map(|s| s.first_id().unwrap())));
+            looking_for.insert(Vec::from_iter(
+                seq.iter().map(|s| s.into_iter().last().unwrap()),
+            ));
+            FonSet::seq_for_each_fon_seq(&seq, |s| {
+                looking_for.remove(s);
+            });
+            TestResult::from_bool(looking_for.is_empty())
+        }
+    }
+    QuickCheck::new()
+        .gen(quickcheck::Gen::new(8))
+        .quickcheck(fonset_seq_for_each_fon_seq_contains_samples as fn(_) -> TestResult);
 }
 
 fn collect_matches<M>(matcher: &M, word: &[M::T]) -> Vec<(Vec<M::T>, usize)>
@@ -429,15 +537,16 @@ fn test_registry_normalize_lowercases() -> Result<()> {
 
 #[test]
 fn test_dictionary_one_key() -> Result<()> {
+    let normalized = &[FonId::from(8u8), FonId::from(2u8)];
     let mut cfg = BuscaCfg::new();
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &[] as &[&str]);
+    assert_eq!(Vec::from_iter(cfg.words_iter(normalized)), &[] as &[&str]);
 
-    cfg.add_to_dictionary("first", b"one")?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &["first"]);
+    cfg.add_to_dictionary("first", normalized)?;
+    assert_eq!(Vec::from_iter(cfg.words_iter(normalized)), &["first"]);
 
-    cfg.add_to_dictionary("another", b"one")?;
+    cfg.add_to_dictionary("another", normalized)?;
     assert_eq!(
-        BTreeSet::from_iter(cfg.words_iter(b"one")),
+        BTreeSet::from_iter(cfg.words_iter(normalized)),
         BTreeSet::from(["another", "first"])
     );
     Ok(())
@@ -445,16 +554,18 @@ fn test_dictionary_one_key() -> Result<()> {
 
 #[test]
 fn test_dictionary_two_keys() -> Result<()> {
+    let norm1 = &[FonId::from(8u8), FonId::from(2u8)];
+    let norm2 = &[FonId::from(18u8), FonId::from(7u8), FonId::from(91u8)];
     let mut cfg = BuscaCfg::new();
-    cfg.add_to_dictionary("first", b"one")?;
-    cfg.add_to_dictionary("another", b"one")?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &[] as &[&str]);
+    cfg.add_to_dictionary("first", norm1)?;
+    cfg.add_to_dictionary("another", norm1)?;
+    assert_eq!(Vec::from_iter(cfg.words_iter(norm2)), &[] as &[&str]);
 
-    cfg.add_to_dictionary("word", b"two")?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &["word"]);
+    cfg.add_to_dictionary("word", norm2)?;
+    assert_eq!(Vec::from_iter(cfg.words_iter(norm2)), &["word"]);
 
     assert_eq!(
-        BTreeSet::from_iter(cfg.words_iter(b"one")),
+        BTreeSet::from_iter(cfg.words_iter(norm1)),
         BTreeSet::from(["another", "first"])
     );
     Ok(())
@@ -462,23 +573,26 @@ fn test_dictionary_two_keys() -> Result<()> {
 
 #[test]
 fn test_dictionary_duplicate_one_key() -> Result<()> {
+    let key = &[FonId::from(33u8)];
     let mut cfg = BuscaCfg::new();
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"key")), &[] as &[&str]);
+    assert_eq!(Vec::from_iter(cfg.words_iter(key)), &[] as &[&str]);
 
-    cfg.add_to_dictionary("value", b"key")?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"key")), &["value"]);
-    cfg.add_to_dictionary("value", b"key")?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"key")), &["value"]);
+    cfg.add_to_dictionary("value", key)?;
+    assert_eq!(Vec::from_iter(cfg.words_iter(key)), &["value"]);
+    cfg.add_to_dictionary("value", key)?;
+    assert_eq!(Vec::from_iter(cfg.words_iter(key)), &["value"]);
     Ok(())
 }
 
 #[test]
 fn test_dictionary_duplicate_two_keys() -> Result<()> {
+    let norm1 = &[FonId::from(8u8), FonId::from(2u8)];
+    let norm2 = &[FonId::from(18u8), FonId::from(7u8), FonId::from(91u8)];
     let mut cfg = BuscaCfg::new();
-    cfg.add_to_dictionary("same", b"one")?;
-    cfg.add_to_dictionary("same", b"two")?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"one")), &["same"]);
-    assert_eq!(Vec::from_iter(cfg.words_iter(b"two")), &["same"]);
+    cfg.add_to_dictionary("same", norm1)?;
+    cfg.add_to_dictionary("same", norm2)?;
+    assert_eq!(Vec::from_iter(cfg.words_iter(norm1)), &["same"]);
+    assert_eq!(Vec::from_iter(cfg.words_iter(norm2)), &["same"]);
     Ok(())
 }
 
@@ -499,14 +613,16 @@ fn test_empty_ruleset_removes_end_anchors() {
 
 #[test]
 fn test_ruleset_add_get() -> Result<()> {
+    let norm1 = &[FonId::from(8u8), FonId::from(2u8)] as &[_];
+    let norm2 = &[FonId::from(18u8), FonId::from(7u8), FonId::from(91u8)] as &[_];
     let mut ruleset = NormalizeRuleSet::new();
-    ruleset.add_rule(&['c'], b"yes")?;
+    ruleset.add_rule(&['c'], norm1)?;
     assert_eq!(ruleset.longest_rule(), 1);
-    ruleset.add_rule(&['a', 'b'], b"ok")?;
+    ruleset.add_rule(&['a', 'b'], norm2)?;
     assert_eq!(ruleset.longest_rule(), 2);
     assert_eq!(ruleset.get_rule(&['a']), None);
-    assert_eq!(ruleset.get_rule(&['a', 'b']), Some(&b"ok"[..]));
-    assert_eq!(ruleset.get_rule(&['c']), Some(&b"yes"[..]));
+    assert_eq!(ruleset.get_rule(&['a', 'b']), Some(norm2));
+    assert_eq!(ruleset.get_rule(&['c']), Some(norm1));
     assert_eq!(ruleset.get_rule(&['x', 'c']), None);
     assert_eq!(ruleset.get_rule(&['c', 'x']), None);
     assert_eq!(ruleset.get_rule(&['d']), None);
@@ -515,19 +631,23 @@ fn test_ruleset_add_get() -> Result<()> {
 
 #[test]
 fn test_ruleset_add_duplicate() -> Result<()> {
+    let norm1 = &[FonId::from(8u8), FonId::from(2u8)];
+    let norm2 = &[FonId::from(18u8), FonId::from(7u8), FonId::from(91u8)];
+    let norm3 = &[FonId::from(10u8)];
+    let norm4 = &[FonId::from(100u8)];
     let mut ruleset = NormalizeRuleSet::new();
-    ruleset.add_rule(&['c'], b"yes")?;
+    ruleset.add_rule(&['c'], norm1)?;
     assert!(matches!(
-        ruleset.add_rule(&['c'], b"no"),
+        ruleset.add_rule(&['c'], norm2),
         Err(DuplicateNormRule(_))
     ));
-    ruleset.add_rule(&['a', 'b'], b"ok")?;
+    ruleset.add_rule(&['a', 'b'], norm3)?;
     assert!(matches!(
-        ruleset.add_rule(&['c'], b"no"),
+        ruleset.add_rule(&['c'], norm2),
         Err(DuplicateNormRule(_))
     ));
     assert!(matches!(
-        ruleset.add_rule(&['a', 'b'], b"nope"),
+        ruleset.add_rule(&['a', 'b'], norm4),
         Err(DuplicateNormRule(_))
     ));
     Ok(())
@@ -535,16 +655,18 @@ fn test_ruleset_add_duplicate() -> Result<()> {
 
 #[test]
 fn test_ruleset_find() -> Result<()> {
+    let norm1 = &[FonId::from(8u8), FonId::from(2u8)] as &[_];
+    let norm2 = &[FonId::from(18u8), FonId::from(7u8), FonId::from(91u8)] as &[_];
     let mut ruleset = NormalizeRuleSet::new();
-    ruleset.add_rule(&['a', 'b'], b"ok")?;
-    ruleset.add_rule(&['c'], b"yes")?;
+    ruleset.add_rule(&['a', 'b'], norm1)?;
+    ruleset.add_rule(&['c'], norm2)?;
     assert_eq!(ruleset.find_rule(&['x']), None);
     assert_eq!(ruleset.find_rule(&['x', 'a', 'b', 'y']), None);
     assert_eq!(ruleset.find_rule(&['x', 'c', 'y']), None);
-    assert_eq!(ruleset.find_rule(&['c']), Some((1, &b"yes"[..])));
-    assert_eq!(ruleset.find_rule(&['c', 'z']), Some((1, &b"yes"[..])));
-    assert_eq!(ruleset.find_rule(&['a', 'b']), Some((2, &b"ok"[..])));
-    assert_eq!(ruleset.find_rule(&['a', 'b', 'n']), Some((2, &b"ok"[..])));
+    assert_eq!(ruleset.find_rule(&['c']), Some((1, norm2)));
+    assert_eq!(ruleset.find_rule(&['c', 'z']), Some((1, norm2)));
+    assert_eq!(ruleset.find_rule(&['a', 'b']), Some((2, norm1)));
+    assert_eq!(ruleset.find_rule(&['a', 'b', 'n']), Some((2, norm1)));
     Ok(())
 }
 
@@ -719,15 +841,14 @@ fn test_buscacfg_search_normalize_error() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_set_alias() -> Result<()> {
+#[quickcheck]
+fn test_set_alias(fons: FonSet) -> Result<()> {
     let mut cfg = BuscaCfg::new();
-    let fons = [3, 4, 5];
     assert_eq!(cfg.try_get_alias("blah"), None);
     assert!(matches!(cfg.get_alias("blah"), Err(NoSuchAlias(_))));
-    cfg.set_alias("blah".into(), fons.into());
-    assert_eq!(cfg.try_get_alias("blah"), Some(fons.into()));
-    assert_eq!(cfg.get_alias("blah")?, fons.into());
+    cfg.set_alias("blah".into(), fons);
+    assert_eq!(cfg.try_get_alias("blah"), Some(fons));
+    assert_eq!(cfg.get_alias("blah")?, fons);
     assert_eq!(cfg.try_get_alias("blah!"), None);
     assert!(matches!(cfg.get_alias("blah!"), Err(NoSuchAlias(_))));
     Ok(())
@@ -888,16 +1009,23 @@ fn test_add_rule_norm_adds_rhs_only_to_registry() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_for_cartesian_product() -> Result<()> {
-    let items: Vec<Vec<i32>> = vec![vec![3, 4], vec![7], vec![0, 10, 100]];
+fn for_cartesian_product_results<T, S>(items: &[S]) -> Result<Vec<Vec<T>>>
+where
+    S: AsRef<[T]>,
+    T: Copy + Default,
+{
     let mut results = Vec::new();
-    for_cartesian_product(&items, |i| {
+    for_cartesian_product(items, |i| {
         results.push(Vec::from(i));
         Ok(())
     })?;
+    Ok(results)
+}
+
+#[test]
+fn test_for_cartesian_product() -> Result<()> {
     assert_eq!(
-        results,
+        for_cartesian_product_results(&[vec![3, 4], vec![7], vec![0, 10, 100]])?,
         vec![
             vec![3, 7, 0],
             vec![3, 7, 10],
@@ -908,6 +1036,55 @@ fn test_for_cartesian_product() -> Result<()> {
         ]
     );
     Ok(())
+}
+
+#[test]
+fn test_for_cartesian_product_len() {
+    fn for_cartesian_product_len_is_product(items: Vec<Vec<u8>>) -> TestResult {
+        let expected_len: usize = items.iter().map(Vec::len).product();
+        if items.is_empty() || expected_len == 0 || expected_len > 10_000 {
+            TestResult::discard()
+        } else {
+            let mut count: usize = 0;
+            for_cartesian_product(&items, |_| {
+                count += 1;
+                Ok(())
+            })
+            .unwrap();
+            TestResult::from_bool(count == expected_len)
+        }
+    }
+    QuickCheck::new()
+        .gen(quickcheck::Gen::new(8))
+        .quickcheck(for_cartesian_product_len_is_product as fn(_) -> TestResult);
+}
+
+#[test]
+fn test_for_cartesian_product_contains_samples() {
+    fn for_cartesian_product_contains_samples(items: Vec<Vec<u8>>) -> TestResult {
+        let expected_len: usize = items.iter().map(Vec::len).product();
+        if items.is_empty() || expected_len == 0 || expected_len > 10_000 {
+            TestResult::discard()
+        } else {
+            let mut looking_for = BTreeSet::new();
+            looking_for.insert(Vec::from_iter(items.iter().map(|v| v[0])));
+            looking_for.insert(Vec::from_iter(
+                items.iter().map(|v| v.last().cloned().unwrap()),
+            ));
+            looking_for.insert(Vec::from_iter(
+                items.iter().map(|v| v.iter().min().cloned().unwrap()),
+            ));
+            for_cartesian_product(&items, |x| {
+                looking_for.remove(x);
+                Ok(())
+            })
+            .unwrap();
+            TestResult::from_bool(looking_for.is_empty())
+        }
+    }
+    QuickCheck::new()
+        .gen(quickcheck::Gen::new(8))
+        .quickcheck(for_cartesian_product_contains_samples as fn(_) -> TestResult);
 }
 
 trait TestingFonRegistry {
