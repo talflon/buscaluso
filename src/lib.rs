@@ -53,7 +53,7 @@ use FonError::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 #[repr(transparent)]
-pub struct FonId {
+pub struct Fon {
     id: u8,
 }
 
@@ -61,7 +61,7 @@ const MAX_FON_ID: u8 = 127;
 
 const MAX_FONS: usize = MAX_FON_ID as usize + 1;
 
-pub const NO_FON: FonId = FonId { id: 0 };
+pub const NO_FON: Fon = Fon { id: 0 };
 
 pub const NO_FON_CHAR: char = '_';
 
@@ -70,17 +70,17 @@ pub struct FonSet {
     bits: u128,
 }
 
-impl From<u8> for FonId {
+impl From<u8> for Fon {
     fn from(id: u8) -> Self {
         debug_assert!(id <= MAX_FON_ID);
-        FonId { id }
+        Fon { id }
     }
 }
 
-impl From<usize> for FonId {
+impl From<usize> for Fon {
     fn from(i: usize) -> Self {
         debug_assert!(i < MAX_FONS);
-        FonId { id: i as u8 }
+        Fon { id: i as u8 }
     }
 }
 
@@ -91,8 +91,8 @@ impl FonSet {
         FonSet::EMPTY
     }
 
-    pub fn contains(&self, id: FonId) -> bool {
-        self.bits & (1 << id.id) != 0
+    pub fn contains(&self, fon: Fon) -> bool {
+        self.bits & (1 << fon.id) != 0
     }
 
     pub fn len(&self) -> usize {
@@ -117,7 +117,7 @@ impl FonSet {
     pub fn fons(&self, reg: &FonRegistry) -> Result<Vec<char>> {
         let mut result: Vec<char> = Vec::new();
         for i in self {
-            result.push(reg.get_fon(i)?);
+            result.push(reg.get_fon_char(i)?);
         }
         Ok(result)
     }
@@ -137,15 +137,15 @@ impl FonSet {
         slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
     }
 
-    fn first_id(&self) -> Option<FonId> {
+    fn first_fon(&self) -> Option<Fon> {
         self.iter().next()
     }
 
-    fn next_id_after(&self, mut id: FonId) -> Option<FonId> {
-        while id.id < MAX_FON_ID {
-            id.id += 1;
-            if self.contains(id) {
-                return Some(id);
+    fn next_fon_after(&self, mut fon: Fon) -> Option<Fon> {
+        while fon.id < MAX_FON_ID {
+            fon.id += 1;
+            if self.contains(fon) {
+                return Some(fon);
             }
         }
         None
@@ -154,29 +154,29 @@ impl FonSet {
     pub fn seq_for_each_fon_seq<S, F>(seq: &S, mut action: F)
     where
         S: AsRef<[FonSet]> + ?Sized,
-        F: FnMut(&[FonId]),
+        F: FnMut(&[Fon]),
     {
         let slice = seq.as_ref();
-        let mut buffer: Vec<FonId> = slice
+        let mut buffer: Vec<Fon> = slice
             .iter()
-            .map(|fonset| fonset.first_id().unwrap())
+            .map(|fonset| fonset.first_fon().unwrap())
             .collect();
         loop {
             action(&buffer);
             for i in (0..slice.len()).rev() {
-                if let Some(id) = slice[i].next_id_after(buffer[i]) {
-                    buffer[i] = id;
+                if let Some(fon) = slice[i].next_fon_after(buffer[i]) {
+                    buffer[i] = fon;
                     break;
                 } else if i == 0 {
                     return;
                 } else {
-                    buffer[i] = slice[i].first_id().unwrap();
+                    buffer[i] = slice[i].first_fon().unwrap();
                 }
             }
         }
     }
 
-    pub fn seq_from_fonseq<S: IntoIterator<Item = FonId>>(seq: S) -> Vec<FonSet> {
+    pub fn seq_from_fonseq<S: IntoIterator<Item = Fon>>(seq: S) -> Vec<FonSet> {
         seq.into_iter().map(FonSet::from).collect()
     }
 
@@ -197,14 +197,14 @@ impl FonSet {
     }
 }
 
-impl From<FonId> for FonSet {
-    fn from(id: FonId) -> Self {
-        FonSet { bits: 1 << id.id }
+impl From<Fon> for FonSet {
+    fn from(fon: Fon) -> Self {
+        FonSet { bits: 1 << fon.id }
     }
 }
 
-impl<const N: usize> From<[FonId; N]> for FonSet {
-    fn from(fons: [FonId; N]) -> Self {
+impl<const N: usize> From<[Fon; N]> for FonSet {
+    fn from(fons: [Fon; N]) -> Self {
         let mut s = FonSet::new();
         for f in fons {
             s |= f;
@@ -213,8 +213,8 @@ impl<const N: usize> From<[FonId; N]> for FonSet {
     }
 }
 
-impl From<&[FonId]> for FonSet {
-    fn from(fons: &[FonId]) -> Self {
+impl From<&[Fon]> for FonSet {
+    fn from(fons: &[Fon]) -> Self {
         let mut s = FonSet::new();
         for f in fons {
             s |= *f;
@@ -233,10 +233,10 @@ impl std::ops::BitOr for FonSet {
     }
 }
 
-impl std::ops::BitOr<FonId> for FonSet {
+impl std::ops::BitOr<Fon> for FonSet {
     type Output = Self;
 
-    fn bitor(self, rhs: FonId) -> Self::Output {
+    fn bitor(self, rhs: Fon) -> Self::Output {
         self | FonSet::from(rhs)
     }
 }
@@ -247,8 +247,8 @@ impl std::ops::BitOrAssign for FonSet {
     }
 }
 
-impl std::ops::BitOrAssign<FonId> for FonSet {
-    fn bitor_assign(&mut self, rhs: FonId) {
+impl std::ops::BitOrAssign<Fon> for FonSet {
+    fn bitor_assign(&mut self, rhs: Fon) {
         *self |= FonSet::from(rhs)
     }
 }
@@ -279,10 +279,10 @@ impl std::ops::Sub for FonSet {
     }
 }
 
-impl std::ops::Sub<FonId> for FonSet {
+impl std::ops::Sub<Fon> for FonSet {
     type Output = Self;
 
-    fn sub(self, rhs: FonId) -> Self::Output {
+    fn sub(self, rhs: Fon) -> Self::Output {
         self - FonSet::from(rhs)
     }
 }
@@ -293,8 +293,8 @@ impl std::ops::SubAssign for FonSet {
     }
 }
 
-impl std::ops::SubAssign<FonId> for FonSet {
-    fn sub_assign(&mut self, rhs: FonId) {
+impl std::ops::SubAssign<Fon> for FonSet {
+    fn sub_assign(&mut self, rhs: Fon) {
         *self -= FonSet::from(rhs)
     }
 }
@@ -305,15 +305,15 @@ pub struct FonSetIter {
 }
 
 impl Iterator for FonSetIter {
-    type Item = FonId;
-    fn next(&mut self) -> Option<FonId> {
+    type Item = Fon;
+    fn next(&mut self) -> Option<Fon> {
         if self.fonset.is_empty() {
             None
         } else {
             // skip all zeros, get nonzero index, then move one past
             let zeros = self.fonset.bits.trailing_zeros();
             self.index += zeros as usize;
-            let item = Some(FonId {
+            let item = Some(Fon {
                 id: self.index as u8,
             });
             self.fonset.bits >>= zeros;
@@ -325,7 +325,7 @@ impl Iterator for FonSetIter {
 }
 
 impl IntoIterator for FonSet {
-    type Item = FonId;
+    type Item = Fon;
     type IntoIter = FonSetIter;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -334,7 +334,7 @@ impl IntoIterator for FonSet {
 }
 
 impl IntoIterator for &FonSet {
-    type Item = FonId;
+    type Item = Fon;
     type IntoIter = FonSetIter;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -342,8 +342,8 @@ impl IntoIterator for &FonSet {
     }
 }
 
-impl FromIterator<FonId> for FonSet {
-    fn from_iter<I: IntoIterator<Item = FonId>>(iter: I) -> Self {
+impl FromIterator<Fon> for FonSet {
+    fn from_iter<I: IntoIterator<Item = Fon>>(iter: I) -> Self {
         let mut s = FonSet::new();
         for i in iter {
             s |= i;
@@ -352,8 +352,8 @@ impl FromIterator<FonId> for FonSet {
     }
 }
 
-impl<'a> FromIterator<&'a FonId> for FonSet {
-    fn from_iter<I: IntoIterator<Item = &'a FonId>>(iter: I) -> Self {
+impl<'a> FromIterator<&'a Fon> for FonSet {
+    fn from_iter<I: IntoIterator<Item = &'a Fon>>(iter: I) -> Self {
         let mut s = FonSet::new();
         for &i in iter {
             s |= i;
@@ -374,14 +374,14 @@ impl FonRegistry {
         }
     }
 
-    pub fn add(&mut self, fon: char) -> Result<FonId> {
-        match self.try_get_id(fon) {
+    pub fn add(&mut self, fon: char) -> Result<Fon> {
+        match self.try_get_fon(fon) {
             Some(id) => Ok(id),
             None => {
                 let id = self.fons.len();
                 if id < MAX_FONS {
                     self.fons.push(fon);
-                    Ok(FonId::from(id))
+                    Ok(Fon::from(id))
                 } else {
                     Err(NoMoreFonIds)
                 }
@@ -389,20 +389,20 @@ impl FonRegistry {
         }
     }
 
-    pub fn try_get_id(&self, fon: char) -> Option<FonId> {
-        self.fons.iter().position(|&f| f == fon).map(FonId::from)
+    pub fn try_get_fon(&self, c: char) -> Option<Fon> {
+        self.fons.iter().position(|&f| f == c).map(Fon::from)
     }
 
-    pub fn get_id(&self, fon: char) -> Result<FonId> {
-        self.try_get_id(fon).ok_or(NoSuchFon(fon))
+    pub fn get_fon(&self, c: char) -> Result<Fon> {
+        self.try_get_fon(c).ok_or(NoSuchFon(c))
     }
 
-    pub fn try_get_fon(&self, id: FonId) -> Option<char> {
-        self.fons.get(id.id as usize).cloned()
+    pub fn try_get_fon_char(&self, fon: Fon) -> Option<char> {
+        self.fons.get(fon.id as usize).cloned()
     }
 
-    pub fn get_fon(&self, id: FonId) -> Result<char> {
-        self.try_get_fon(id).ok_or(NoSuchFonId(id.id))
+    pub fn get_fon_char(&self, fon: Fon) -> Result<char> {
+        self.try_get_fon_char(fon).ok_or(NoSuchFonId(fon.id))
     }
 
     pub fn mark(&self) -> FonRegistryMark {
@@ -424,9 +424,9 @@ impl Default for FonRegistry {
 pub struct FonRegistryMark(usize);
 
 trait Normalizer {
-    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()>;
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<Fon>) -> Result<()>;
 
-    fn normalize(&self, word: &str) -> Result<Vec<FonId>> {
+    fn normalize(&self, word: &str) -> Result<Vec<Fon>> {
         let mut normalized = Vec::new();
         self.normalize_into(word, &mut normalized)?;
         Ok(normalized)
@@ -438,15 +438,15 @@ fn prenormalized_chars(word: &str) -> impl Iterator<Item = char> + '_ {
 }
 
 impl Normalizer for FonRegistry {
-    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<Fon>) -> Result<()> {
         for c in prenormalized_chars(word) {
-            normalized.push(self.get_id(c)?);
+            normalized.push(self.get_fon(c)?);
         }
         Ok(())
     }
 }
 
-type NormalizeRuleMap = BTreeMap<Box<[char]>, Box<[FonId]>>;
+type NormalizeRuleMap = BTreeMap<Box<[char]>, Box<[Fon]>>;
 
 #[derive(Debug, Clone)]
 pub struct NormalizeRuleSet {
@@ -460,7 +460,7 @@ impl NormalizeRuleSet {
         NormalizeRuleSet {
             rules: vec![BTreeMap::from([(
                 Box::from(&[NO_FON_CHAR] as &[char]),
-                Box::from(&[] as &[FonId]),
+                Box::from(&[] as &[Fon]),
             )])],
         }
     }
@@ -473,7 +473,7 @@ impl NormalizeRuleSet {
         self.rules.len()
     }
 
-    pub fn add_rule(&mut self, pattern: &[char], normed: &[FonId]) -> Result<()> {
+    pub fn add_rule(&mut self, pattern: &[char], normed: &[Fon]) -> Result<()> {
         while self.longest_rule() < pattern.len() {
             self.rules.push(BTreeMap::new());
         }
@@ -486,13 +486,13 @@ impl NormalizeRuleSet {
         }
     }
 
-    pub fn get_rule(&self, pattern: &[char]) -> Option<&[FonId]> {
+    pub fn get_rule(&self, pattern: &[char]) -> Option<&[Fon]> {
         self.rules
             .get(Self::rule_len_idx(pattern.len()))
             .and_then(|m| m.get(pattern).map(Box::borrow))
     }
 
-    pub fn find_rule(&self, input: &[char]) -> Option<(usize, &[FonId])> {
+    pub fn find_rule(&self, input: &[char]) -> Option<(usize, &[Fon])> {
         for len in (1..=min(input.len(), self.longest_rule())).rev() {
             if let Some(rule) = self.get_rule(&input[..len]) {
                 return Some((len, rule));
@@ -508,7 +508,7 @@ trait RuleBasedNormalizer {
 }
 
 impl<N: RuleBasedNormalizer> Normalizer for N {
-    fn normalize_into(&self, word: &str, normalized: &mut Vec<FonId>) -> Result<()> {
+    fn normalize_into(&self, word: &str, normalized: &mut Vec<Fon>) -> Result<()> {
         if word.contains(NO_FON_CHAR) {
             return Err(NoSuchFon(NO_FON_CHAR));
         }
@@ -524,7 +524,7 @@ impl<N: RuleBasedNormalizer> Normalizer for N {
                 input = &input[len..];
             } else {
                 // fall back to registry, to output a single char.
-                normalized.push(self.fon_registry().get_id(input[0])?);
+                normalized.push(self.fon_registry().get_fon(input[0])?);
                 input = &input[1..];
             }
         }
@@ -841,7 +841,7 @@ impl<T: Ord + Copy> SliceSet<T> for BTreeSet<Box<[T]>> {
 #[derive(Debug, Clone)]
 pub struct BuscaCfg {
     fon_registry: FonRegistry,
-    dictionary: BTreeMap<Box<[FonId]>, Vec<Box<str>>>,
+    dictionary: BTreeMap<Box<[Fon]>, Vec<Box<str>>>,
     normalize_rules: NormalizeRuleSet,
     aliases: BTreeMap<String, FonSet>,
     mutation_rules: ReplaceRuleCostSet<MutRule>,
@@ -934,7 +934,7 @@ impl BuscaCfg {
         Ok(fons)
     }
 
-    fn resolve_norm_rule_result(&mut self, rule_result: &rulefile::ItemSeq) -> Result<Vec<FonId>> {
+    fn resolve_norm_rule_result(&mut self, rule_result: &rulefile::ItemSeq) -> Result<Vec<Fon>> {
         let mut normalized = Vec::new();
         if rule_result != &[rulefile::Item::None] {
             for item in rule_result {
@@ -993,7 +993,7 @@ impl BuscaCfg {
         for fon_set in fonsets {
             let char_set: Result<Vec<char>> = fon_set
                 .iter()
-                .map(|i| self.fon_registry.get_fon(i))
+                .map(|i| self.fon_registry.get_fon_char(i))
                 .collect();
             output.push(char_set?);
         }
@@ -1001,7 +1001,7 @@ impl BuscaCfg {
         Ok(output)
     }
 
-    pub fn add_to_dictionary(&mut self, word: &str, normalized: &[FonId]) -> Result<()> {
+    pub fn add_to_dictionary(&mut self, word: &str, normalized: &[Fon]) -> Result<()> {
         match self.dictionary.get_mut(normalized) {
             Some(words) => {
                 if !words.iter().any(|w| w.as_ref() == word) {
@@ -1028,7 +1028,7 @@ impl BuscaCfg {
         Ok(())
     }
 
-    pub fn words_iter(&self, fonseq: &[FonId]) -> impl Iterator<Item = &str> {
+    pub fn words_iter(&self, fonseq: &[Fon]) -> impl Iterator<Item = &str> {
         self.dictionary
             .get(fonseq)
             .into_iter()
@@ -1156,7 +1156,7 @@ impl<'a> Busca<'a> {
         is_new
     }
 
-    fn visit_fonseq(&mut self, word_fonseq: &[FonId], cost: Cost) {
+    fn visit_fonseq(&mut self, word_fonseq: &[Fon], cost: Cost) {
         for word_str in self.cfg.words_iter(word_fonseq) {
             self.visit_str(word_str, cost);
         }
