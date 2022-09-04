@@ -1,7 +1,9 @@
 use super::*;
 
 use std::collections::BTreeSet;
-use std::convert::identity;
+
+use quickcheck::{Arbitrary, TestResult};
+use quickcheck_macros::*;
 
 use rulefile::Item;
 
@@ -185,7 +187,7 @@ fn test_fonset_fons() -> Result<()> {
         s |= reg.add(c)?;
     }
     assert_eq!(s.fons(&reg)?, chars);
-    assert_eq!(FonSet::EMPTY.fons(&reg)?, vec![]);
+    assert!(FonSet::EMPTY.fons(&reg)?.is_empty());
     Ok(())
 }
 
@@ -940,255 +942,195 @@ impl TestingFonRegistry for FonRegistry {
     }
 }
 
-fn check_replace_rule_for_each_match_at_with_lookarounds<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &reg.setseq(&["ab", "cd"])?,
-        &reg.setseq(&["q"])?,
-        &reg.setseq(&["o", "nr"])?,
-        &reg.setseq(&["a", "b"])?,
-    )?);
-    assert!(collect_matches_at(&matcher, 0, &reg.setseq(&["h", "e", "l", "l", "o"])?).is_empty());
-    assert_eq!(
-        collect_matches_at(&matcher, 0, &reg.setseq(&["b", "c", "q", "a", "b"])?),
-        vec![reg.setseq(&["b", "c", "o", "nr", "a", "b"])?,]
-    );
-    assert!(collect_matches_at(&matcher, 1, &reg.setseq(&["b", "c", "q", "a", "b"])?).is_empty());
-    assert_eq!(
-        collect_matches_at(
-            &matcher,
-            1,
-            &reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?
-        ),
-        vec![reg.setseq(&["z", "b", "c", "o", "nr", "a", "b", "l"])?,]
-    );
-    assert!(collect_matches_at(
-        &matcher,
-        0,
-        &reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?
-    )
-    .is_empty());
-    Ok(())
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+struct MockMutationRule<T> {
+    matches: Vec<(Vec<T>, usize)>,
+    matches_at: Vec<Vec<T>>,
+}
+
+impl<T: Clone> MutationRule for MockMutationRule<T> {
+    type T = T;
+
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+        &self,
+        _word: &[Self::T],
+        _word_idx: usize,
+        mut action: F,
+        result_buf: &mut Vec<Self::T>,
+    ) {
+        for result in &self.matches_at {
+            result_buf.clear();
+            result_buf.extend_from_slice(result);
+            action(result_buf);
+        }
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+        &self,
+        _word: &[Self::T],
+        mut action: F,
+        result_buf: &mut Vec<Self::T>,
+    ) {
+        for (result, idx) in &self.matches {
+            result_buf.clear();
+            result_buf.extend_from_slice(result);
+            action(result_buf, *idx);
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ArbReplaceRule<T> {
+    remove_idx: usize,
+    remove_len: usize,
+    replace_with: Vec<T>,
+}
+
+impl<T: Arbitrary> Arbitrary for ArbReplaceRule<T> {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        ArbReplaceRule {
+            remove_idx: u8::arbitrary(g) as usize,
+            remove_len: u8::arbitrary(g) as usize,
+            replace_with: Vec::arbitrary(g),
+        }
+    }
+}
+
+fn prep_replace_rule<T: Clone>(
+    match_val: Vec<T>,
+    match_idx: usize,
+    repl_args: ArbReplaceRule<T>,
+) -> Option<ReplaceRule<MockMutationRule<T>>> {
+    let rule = ReplaceRule {
+        matcher: MockMutationRule {
+            matches: vec![(match_val.clone(), match_idx)],
+            matches_at: vec![match_val.clone()],
+        },
+        remove_idx: repl_args.remove_idx,
+        remove_len: repl_args.remove_len,
+        replace_with: repl_args.replace_with.into(),
+    };
+    if match_idx + rule.get_remove_end() > match_val.len() {
+        None
+    } else {
+        Some(rule)
+    }
+}
+
+fn match_mock_replace_rule<T: Clone>(
+    match_val: Vec<T>,
+    match_idx: usize,
+    repl_args: ArbReplaceRule<T>,
+) -> Option<Vec<T>> {
+    prep_replace_rule(match_val, match_idx, repl_args).map(|rule| {
+        let (result, _) = collect_matches(&rule, &[]).into_iter().next().unwrap();
+        result
+    })
+}
+
+fn match_at_mock_replace_rule<T: Clone>(
+    match_val: Vec<T>,
+    match_idx: usize,
+    repl_args: ArbReplaceRule<T>,
+) -> Option<Vec<T>> {
+    prep_replace_rule(match_val, match_idx, repl_args).map(|rule| {
+        collect_matches_at(&rule, match_idx, &[])
+            .into_iter()
+            .next()
+            .unwrap()
+    })
+}
+
+#[quickcheck]
+fn replace_rule_for_each_match_inserts(
+    match_val: Vec<u8>,
+    match_idx: u8,
+    repl_args: ArbReplaceRule<u8>,
+) -> TestResult {
+    let match_idx = match_idx as usize;
+    if let Some(result) = match_mock_replace_rule(match_val, match_idx, repl_args.clone()) {
+        TestResult::from_bool(
+            result[match_idx + repl_args.remove_idx..].starts_with(&repl_args.replace_with),
+        )
+    } else {
+        TestResult::discard()
+    }
+}
+
+#[quickcheck]
+fn replace_rule_for_each_match_at_inserts(
+    match_val: Vec<u8>,
+    match_idx: u8,
+    repl_args: ArbReplaceRule<u8>,
+) -> TestResult {
+    let match_idx = match_idx as usize;
+    if let Some(result) = match_at_mock_replace_rule(match_val, match_idx, repl_args.clone()) {
+        TestResult::from_bool(
+            result[match_idx + repl_args.remove_idx..].starts_with(&repl_args.replace_with),
+        )
+    } else {
+        TestResult::discard()
+    }
+}
+
+#[quickcheck]
+fn replace_rule_for_each_match_removes(
+    match_val: Vec<u8>,
+    match_idx: u8,
+    repl_args: ArbReplaceRule<u8>,
+) -> TestResult {
+    let match_idx = match_idx as usize;
+    if let Some(result) = match_mock_replace_rule(match_val.clone(), match_idx, repl_args.clone()) {
+        TestResult::from_bool(
+            result[match_idx + repl_args.remove_idx + repl_args.replace_with.len()..]
+                .starts_with(&match_val[match_idx + repl_args.remove_idx + repl_args.remove_len..]),
+        )
+    } else {
+        TestResult::discard()
+    }
+}
+
+#[quickcheck]
+fn replace_rule_for_each_match_at_removes(
+    match_val: Vec<u8>,
+    match_idx: u8,
+    repl_args: ArbReplaceRule<u8>,
+) -> TestResult {
+    let match_idx = match_idx as usize;
+    if let Some(result) =
+        match_at_mock_replace_rule(match_val.clone(), match_idx, repl_args.clone())
+    {
+        TestResult::from_bool(
+            result[match_idx + repl_args.remove_idx + repl_args.replace_with.len()..]
+                .starts_with(&match_val[match_idx + repl_args.remove_idx + repl_args.remove_len..]),
+        )
+    } else {
+        TestResult::discard()
+    }
+}
+
+#[quickcheck]
+fn test_replace_rule_set_for_each_match(matches: Vec<(Vec<u8>, usize)>) -> bool {
+    let rule = MockMutationRule {
+        matches,
+        ..Default::default()
+    };
+    collect_matches(&ReplaceRuleSet::from(rule.clone()), &[]) == collect_matches(&rule, &[])
+}
+
+#[quickcheck]
+fn test_replace_rule_set_for_each_match_at(matches_at: Vec<Vec<u8>>) -> bool {
+    let rule = MockMutationRule {
+        matches_at,
+        ..Default::default()
+    };
+    collect_matches_at(&ReplaceRuleSet::from(rule.clone()), 0, &[])
+        == collect_matches_at(&rule, 0, &[])
 }
 
 #[test]
-fn test_replace_rule_for_each_match_at_with_lookarounds() -> Result<()> {
-    check_replace_rule_for_each_match_at_with_lookarounds(identity)
-}
-
-#[test]
-fn test_replace_rule_set_for_each_match_at_with_lookarounds() -> Result<()> {
-    check_replace_rule_for_each_match_at_with_lookarounds(ReplaceRuleSet::from)
-}
-
-fn check_replace_rule_for_each_match_with_lookarounds<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &reg.setseq(&["ab", "cd"])?,
-        &reg.setseq(&["q"])?,
-        &reg.setseq(&["o", "nr"])?,
-        &reg.setseq(&["a", "b"])?,
-    )?);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["h", "e", "l", "l", "o"])?),
-        vec![]
-    );
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["b", "c", "q", "a", "b"])?),
-        vec![(reg.setseq(&["b", "c", "o", "nr", "a", "b"])?, 0),]
-    );
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["z", "b", "c", "q", "a", "b", "l"])?),
-        vec![(reg.setseq(&["z", "b", "c", "o", "nr", "a", "b", "l"])?, 1),]
-    );
-    Ok(())
-}
-
-#[test]
-fn test_replace_rule_for_each_match_with_lookarounds() -> Result<()> {
-    check_replace_rule_for_each_match_with_lookarounds(identity)
-}
-
-#[test]
-fn test_replace_rule_set_for_each_match_with_lookarounds() -> Result<()> {
-    check_replace_rule_for_each_match_with_lookarounds(ReplaceRuleSet::from)
-}
-
-fn check_replace_rule_for_each_match_simple<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &[],
-        &reg.setseq(&["x"])?,
-        &reg.setseq(&["y"])?,
-        &[],
-    )?);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["x"])?),
-        vec![(reg.setseq(&["y"])?, 0),]
-    );
-    assert_eq!(collect_matches(&matcher, &reg.setseq(&["z"])?), vec![]);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["xyz"])?),
-        vec![(reg.setseq(&["y"])?, 0),]
-    );
-    Ok(())
-}
-
-#[test]
-fn test_replace_rule_for_each_match_simple() -> Result<()> {
-    check_replace_rule_for_each_match_simple(identity)
-}
-
-#[test]
-fn test_replace_rule_set_for_each_match_simple() -> Result<()> {
-    check_replace_rule_for_each_match_simple(ReplaceRuleSet::from)
-}
-
-fn check_replace_rule_for_each_match_no_lookaround<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &[],
-        &reg.setseq(&["ab"])?,
-        &reg.setseq(&["cd"])?,
-        &[],
-    )?);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["a", "b", "c"])?),
-        vec![
-            (reg.setseq(&["cd", "b", "c"])?, 0),
-            (reg.setseq(&["a", "cd", "c"])?, 1),
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn test_replace_rule_for_each_match_no_lookaround() -> Result<()> {
-    check_replace_rule_for_each_match_no_lookaround(identity)
-}
-
-#[test]
-fn test_replace_rule_set_for_each_match_no_lookaround() -> Result<()> {
-    check_replace_rule_for_each_match_no_lookaround(ReplaceRuleSet::from)
-}
-
-fn check_replace_rule_for_each_match_anchor_front<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &[FonSet::from(NO_FON)],
-        &reg.setseq(&["ab"])?,
-        &reg.setseq(&["cd"])?,
-        &[],
-    )?);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["a", "b", "c"])?),
-        vec![(reg.setseq(&["cd", "b", "c"])?, 0),]
-    );
-    Ok(())
-}
-
-#[test]
-#[ignore]
-fn test_replace_rule_for_each_match_anchor_front() -> Result<()> {
-    check_replace_rule_for_each_match_anchor_front(identity)
-}
-
-#[test]
-#[ignore]
-fn test_replace_rule_set_for_each_match_anchor_front() -> Result<()> {
-    check_replace_rule_for_each_match_anchor_front(ReplaceRuleSet::from)
-}
-
-fn check_replace_rule_for_each_match_anchor_end<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &[],
-        &reg.setseq(&["ab"])?,
-        &reg.setseq(&["cd"])?,
-        &[FonSet::from(NO_FON)],
-    )?);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["c", "a", "b"])?),
-        vec![(reg.setseq(&["c", "a", "cd"])?, 0),]
-    );
-    Ok(())
-}
-
-#[test]
-#[ignore]
-fn test_replace_rule_for_each_match_anchor_end() -> Result<()> {
-    check_replace_rule_for_each_match_anchor_end(identity)
-}
-
-#[test]
-#[ignore]
-fn test_replace_rule_set_for_each_match_anchor_end() -> Result<()> {
-    check_replace_rule_for_each_match_anchor_end(ReplaceRuleSet::from)
-}
-
-fn check_replace_rule_for_each_match_anchor_both<F, M>(get_matcher: F) -> Result<()>
-where
-    F: FnOnce(MutRule) -> M,
-    M: MutationRule<T = FonSet>,
-{
-    let mut reg = FonRegistry::new();
-    let matcher = get_matcher(create_replace_rule(
-        &[FonSet::from(NO_FON)],
-        &reg.setseq(&["ab"])?,
-        &reg.setseq(&["cd"])?,
-        &[FonSet::from(NO_FON)],
-    )?);
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["c", "a", "b"])?),
-        vec![]
-    );
-    assert_eq!(
-        collect_matches(&matcher, &reg.setseq(&["b"])?),
-        vec![(reg.setseq(&["cd"])?, 0),]
-    );
-    Ok(())
-}
-
-#[test]
-#[ignore]
-fn test_replace_rule_for_each_match_anchor_both() -> Result<()> {
-    check_replace_rule_for_each_match_anchor_both(identity)
-}
-
-#[test]
-#[ignore]
-fn test_replace_rule_set_for_each_match_anchor_both() -> Result<()> {
-    check_replace_rule_for_each_match_anchor_both(ReplaceRuleSet::from)
-}
-
-#[test]
-fn test_replace_rule_set_add() -> Result<()> {
-    let mut reg = FonRegistry::new();
-    let rule = create_replace_rule(&[], &reg.setseq(&["ab"])?, &reg.setseq(&["cd"])?, &[])?;
+fn test_replace_rule_cost_set_add() -> Result<()> {
+    let rule: MockMutationRule<i32> = Default::default();
     let mut rule_set = ReplaceRuleCostSet::new();
     let cost: Cost = 3;
     rule_set.add_rule(rule.clone(), cost);
