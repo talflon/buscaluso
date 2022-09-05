@@ -34,6 +34,109 @@ impl Arbitrary for SmallFonSet {
     }
 }
 
+#[derive(Debug, Clone)]
+struct NonEmptyVec<T>(Vec<T>);
+
+impl<T: Arbitrary> Arbitrary for NonEmptyVec<T> {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        loop {
+            let v = Vec::arbitrary(g);
+            if !v.is_empty() {
+                return NonEmptyVec(v);
+            }
+        }
+    }
+}
+
+impl<T> AsRef<[T]> for NonEmptyVec<T> {
+    fn as_ref(&self) -> &[T] {
+        self.0.as_ref()
+    }
+}
+
+impl<T> IntoIterator for NonEmptyVec<T> {
+    type Item = T;
+
+    type IntoIter = <Vec<T> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct NonEmptyFonSetSeq(Vec<FonSet>);
+
+impl Arbitrary for NonEmptyFonSetSeq {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        loop {
+            let v = Vec::arbitrary(g);
+            if !v.is_empty() && !v.contains(&FonSet::EMPTY) {
+                return NonEmptyFonSetSeq(v);
+            }
+        }
+    }
+}
+
+impl AsRef<[FonSet]> for NonEmptyFonSetSeq {
+    fn as_ref(&self) -> &[FonSet] {
+        self.0.as_ref()
+    }
+}
+
+impl IntoIterator for NonEmptyFonSetSeq {
+    type Item = FonSet;
+
+    type IntoIter = <Vec<FonSet> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WithIndex<A: Arbitrary> {
+    item: A,
+    index: usize,
+}
+
+impl<A> Arbitrary for WithIndex<A>
+where
+    A: Arbitrary,
+    A: IntoIterator,
+    A: AsRef<[A::Item]>,
+{
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        loop {
+            let item = A::arbitrary(g);
+            let len = item.as_ref().len();
+            if len > 0 {
+                let index = usize::arbitrary(g) % len;
+                return WithIndex { item, index };
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WithInsIndex<A: Arbitrary> {
+    item: A,
+    index: usize,
+}
+
+impl<A> Arbitrary for WithInsIndex<A>
+where
+    A: Arbitrary,
+    A: IntoIterator,
+    A: AsRef<[A::Item]>,
+{
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        let item = A::arbitrary(g);
+        let index = usize::arbitrary(g) % (item.as_ref().len() + 1);
+        WithInsIndex { item, index }
+    }
+}
+
 #[test]
 fn test_fon_registry_empty() {
     let reg = FonRegistry::new();
@@ -231,28 +334,20 @@ fn test_fonset_fons() -> Result<()> {
 }
 
 #[quickcheck]
-fn test_fonsetseq_empty_if_any_empty(mut setseq: Vec<FonSet>, index: usize) {
-    let index = index % (setseq.len() + 1);
+fn test_fonsetseq_empty_if_any_empty(setseq: WithInsIndex<Vec<FonSet>>) {
+    let index = setseq.index;
+    let mut setseq = setseq.item;
     setseq.insert(index, FonSet::EMPTY);
     assert!(FonSet::seq_is_empty(&setseq));
 }
 
 #[quickcheck]
-fn test_fonsetseq_not_empty(setseq: Vec<FonSet>) -> TestResult {
-    for set in &setseq {
-        if set.is_empty() {
-            return TestResult::discard();
-        }
-    }
-    if setseq.is_empty() {
-        TestResult::discard()
-    } else {
-        TestResult::from_bool(!FonSet::seq_is_empty(&setseq))
-    }
+fn test_fonsetseq_not_empty(setseq: NonEmptyFonSetSeq) -> bool {
+    !FonSet::seq_is_empty(setseq.as_ref())
 }
 
 #[test]
-fn test_fonsetseq_empty() {
+fn test_fonsetseq_zero_len_empty() {
     assert!(FonSet::seq_is_empty(&[]));
 }
 
@@ -405,24 +500,58 @@ fn test_fonset_seq_for_each_fon_seq_contains_samples() {
         .quickcheck(fonset_seq_for_each_fon_seq_contains_samples as fn(_) -> TestResult);
 }
 
-fn collect_matches<M>(matcher: &M, word: &[M::T]) -> Vec<(Vec<M::T>, usize)>
+fn collect_matches<M>(matcher: &M, word: &[M::Alph]) -> Vec<(Vec<M::Alph>, usize)>
 where
     M: MutationRule,
-    M::T: Clone,
+    M::Alph: Clone,
 {
-    let mut results: Vec<(Vec<M::T>, usize)> = Vec::new();
+    let mut results: Vec<(Vec<M::Alph>, usize)> = Vec::new();
     matcher.for_each_match(word, |result, index| results.push((result.clone(), index)));
     results
 }
 
-fn collect_matches_at<M>(matcher: &M, index: usize, word: &[M::T]) -> Vec<Vec<M::T>>
+fn collect_matches_at<M>(matcher: &M, index: usize, word: &[M::Alph]) -> Vec<Vec<M::Alph>>
 where
     M: MutationRule,
-    M::T: Clone,
+    M::Alph: Clone,
 {
-    let mut results: Vec<Vec<M::T>> = Vec::new();
+    let mut results: Vec<Vec<M::Alph>> = Vec::new();
     matcher.for_each_match_at(word, index, |result| results.push(result.clone()));
     results
+}
+
+fn check_match_result_reasonable(
+    word: &[FonSet],
+    pattern: &[FonSet],
+    result_buf: &mut Vec<FonSet>,
+    word_idx: usize,
+) {
+    assert_eq!(result_buf.len(), word.len());
+    assert!(word_idx <= word.len() - pattern.len());
+    assert_eq!(result_buf[0..word_idx], word[0..word_idx]);
+    assert!(!FonSet::seq_is_empty(result_buf));
+}
+
+#[quickcheck]
+fn test_fonsetseq_for_each_match_fuzz(word: NonEmptyFonSetSeq, pattern: NonEmptyFonSetSeq) {
+    let word = word.as_ref();
+    let pattern = pattern.as_ref();
+    pattern.for_each_match(word, |result_buf, word_idx| {
+        check_match_result_reasonable(word, pattern, result_buf, word_idx);
+    });
+}
+
+#[quickcheck]
+fn test_fonsetseq_for_each_match_at_fuzz(
+    word: WithIndex<NonEmptyFonSetSeq>,
+    pattern: NonEmptyFonSetSeq,
+) {
+    let word_idx = word.index;
+    let word = word.item.as_ref();
+    let pattern = pattern.as_ref();
+    pattern.for_each_match_at(word, word_idx, |result_buf| {
+        check_match_result_reasonable(word, pattern, result_buf, word_idx);
+    });
 }
 
 #[test]
@@ -1126,14 +1255,14 @@ struct MockMutationRule<T> {
 }
 
 impl<T: Clone> MutationRule for MockMutationRule<T> {
-    type T = T;
+    type Alph = T;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
         &self,
-        _word: &[Self::T],
+        _word: &[Self::Alph],
         _word_idx: usize,
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         for result in &self.matches_at {
             result_buf.clear();
@@ -1142,11 +1271,11 @@ impl<T: Clone> MutationRule for MockMutationRule<T> {
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
         &self,
-        _word: &[Self::T],
+        _word: &[Self::Alph],
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         for (result, idx) in &self.matches {
             result_buf.clear();
@@ -1314,6 +1443,41 @@ fn test_replace_rule_cost_set_add() -> Result<()> {
     let idx = rule_set.costs.iter().position(|&c| c == cost).unwrap();
     assert!(rule_set.rules[idx].rules.contains(&rule));
     Ok(())
+}
+
+#[quickcheck]
+fn test_start_anchored_fonsetseq_rule(word: NonEmptyFonSetSeq, pattern: NonEmptyFonSetSeq) {
+    let word = word.as_ref();
+    let pattern = pattern.as_ref();
+    let rule = StartAnchoredRule(pattern);
+    assert_eq!(
+        collect_matches(&rule, word),
+        Vec::from_iter(
+            collect_matches_at(&pattern, 0, word)
+                .into_iter()
+                .map(|r| (r, 0))
+        )
+    );
+}
+
+#[quickcheck]
+fn test_end_anchored_fonsetseq_rule(word: NonEmptyFonSetSeq, pattern: NonEmptyFonSetSeq) {
+    let word = word.as_ref();
+    let pattern = pattern.as_ref();
+    let rule = EndAnchoredRule(pattern);
+    if pattern.len() > word.len() {
+        assert_eq!(collect_matches(&rule, word), vec![]);
+    } else {
+        let index = word.len() - pattern.len();
+        assert_eq!(
+            collect_matches(&rule, word),
+            Vec::from_iter(
+                collect_matches_at(&pattern, index, word)
+                    .into_iter()
+                    .map(|r| (r, index))
+            )
+        );
+    }
 }
 
 #[test]

@@ -545,30 +545,30 @@ impl<'a, 'b> RuleBasedNormalizer for (&'a NormalizeRuleSet, &'b FonRegistry) {
 }
 
 trait MutationRule {
-    type T;
+    type Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         word_idx: usize,
         action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     );
 
-    fn for_each_match_at<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at<F: FnMut(&mut Vec<Self::Alph>)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         word_idx: usize,
         action: F,
     ) {
         self.for_each_match_at_using(word, word_idx, action, &mut Vec::new());
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         for word_idx in 0..=word.len() {
             self.for_each_match_at_using(
@@ -580,9 +580,20 @@ trait MutationRule {
         }
     }
 
-    fn for_each_match<F: FnMut(&mut Vec<Self::T>, usize)>(&self, word: &[Self::T], action: F) {
+    fn for_each_match<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+        &self,
+        word: &[Self::Alph],
+        action: F,
+    ) {
         self.for_each_match_using(word, action, &mut Vec::new());
     }
+}
+
+trait FixedLenRule
+where
+    Self: MutationRule,
+{
+    fn match_len(&self) -> usize;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -593,13 +604,13 @@ where
     matcher: M,
     remove_idx: usize,
     remove_len: usize,
-    replace_with: Box<[M::T]>,
+    replace_with: Box<[M::Alph]>,
 }
 
 impl<M> ReplaceRule<M>
 where
     M: MutationRule,
-    M::T: Clone,
+    M::Alph: Clone,
 {
     fn get_remove_start(&self) -> usize {
         self.remove_idx
@@ -613,7 +624,7 @@ where
         self.remove_len
     }
 
-    fn splice_into(&self, index: usize, result_buf: &mut Vec<M::T>) {
+    fn splice_into(&self, index: usize, result_buf: &mut Vec<M::Alph>) {
         result_buf.splice(
             (index + self.get_remove_start())..(index + self.get_remove_end()),
             self.replace_with.iter().cloned(),
@@ -624,16 +635,16 @@ where
 impl<M> MutationRule for ReplaceRule<M>
 where
     M: MutationRule,
-    M::T: Clone,
+    M::Alph: Clone,
 {
-    type T = M::T;
+    type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         word_idx: usize,
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         self.matcher.for_each_match_at_using(
             word,
@@ -646,11 +657,11 @@ where
         );
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         self.matcher.for_each_match_using(
             word,
@@ -660,6 +671,16 @@ where
             },
             result_buf,
         );
+    }
+}
+
+impl<M> FixedLenRule for ReplaceRule<M>
+where
+    M: FixedLenRule,
+    M::Alph: Clone,
+{
+    fn match_len(&self) -> usize {
+        self.matcher.match_len()
     }
 }
 
@@ -688,7 +709,7 @@ fn create_replace_rule(
 }
 
 impl<S: AsRef<[FonSet]>> MutationRule for S {
-    type T = FonSet;
+    type Alph = FonSet;
 
     fn for_each_match_at_using<F: FnMut(&mut Vec<FonSet>)>(
         &self,
@@ -724,6 +745,93 @@ impl<S: AsRef<[FonSet]>> MutationRule for S {
     }
 }
 
+impl<S: AsRef<[FonSet]>> FixedLenRule for S {
+    fn match_len(&self) -> usize {
+        self.as_ref().len()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct StartAnchoredRule<M: MutationRule>(M);
+
+impl<M: MutationRule> MutationRule for StartAnchoredRule<M> {
+    type Alph = M::Alph;
+
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+        &self,
+        word: &[Self::Alph],
+        word_idx: usize,
+        action: F,
+        result_buf: &mut Vec<Self::Alph>,
+    ) {
+        debug_assert!(word_idx == 0);
+        self.0
+            .for_each_match_at_using(word, word_idx, action, result_buf);
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+        &self,
+        word: &[Self::Alph],
+        mut action: F,
+        result_buf: &mut Vec<Self::Alph>,
+    ) {
+        self.for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
+    }
+}
+
+impl<M> FixedLenRule for StartAnchoredRule<M>
+where
+    M: FixedLenRule,
+{
+    fn match_len(&self) -> usize {
+        self.0.match_len()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct EndAnchoredRule<M: FixedLenRule>(M);
+
+impl<M: FixedLenRule> MutationRule for EndAnchoredRule<M> {
+    type Alph = M::Alph;
+
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+        &self,
+        word: &[Self::Alph],
+        word_idx: usize,
+        action: F,
+        result_buf: &mut Vec<Self::Alph>,
+    ) {
+        debug_assert!(word_idx + self.match_len() == word.len());
+        self.0
+            .for_each_match_at_using(word, word_idx, action, result_buf);
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+        &self,
+        word: &[Self::Alph],
+        mut action: F,
+        result_buf: &mut Vec<Self::Alph>,
+    ) {
+        if let Some(word_idx) = word.len().checked_sub(self.match_len()) {
+            self.for_each_match_at_using(
+                word,
+                word_idx,
+                |result_buf| action(result_buf, word_idx),
+                result_buf,
+            );
+        }
+    }
+}
+
+impl<M> FixedLenRule for EndAnchoredRule<M>
+where
+    M: FixedLenRule,
+{
+    fn match_len(&self) -> usize {
+        self.0.match_len()
+    }
+}
+
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
@@ -756,25 +864,25 @@ impl<M: MutationRule> From<M> for ReplaceRuleSet<M> {
 }
 
 impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
-    type T = M::T;
+    type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::T>)>(
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         word_idx: usize,
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         for rule in &self.rules {
             rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::T>, usize)>(
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
         &self,
-        word: &[Self::T],
+        word: &[Self::Alph],
         mut action: F,
-        result_buf: &mut Vec<Self::T>,
+        result_buf: &mut Vec<Self::Alph>,
     ) {
         for rule in &self.rules {
             rule.for_each_match_using(word, &mut action, result_buf);
