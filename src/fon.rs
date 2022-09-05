@@ -8,7 +8,7 @@ use crate::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 #[repr(transparent)]
 pub struct Fon {
-    pub id: u8,
+    id: u8,
 }
 
 pub const MAX_FON_ID: u8 = 127;
