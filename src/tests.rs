@@ -1252,6 +1252,7 @@ impl TestingFonRegistry for FonRegistry {
 struct MockMutationRule<T> {
     matches: Vec<(Vec<T>, usize)>,
     matches_at: Vec<Vec<T>>,
+    match_len: usize,
 }
 
 impl<T: Clone> MutationRule for MockMutationRule<T> {
@@ -1285,6 +1286,12 @@ impl<T: Clone> MutationRule for MockMutationRule<T> {
     }
 }
 
+impl<T: Clone> FixedLenRule for MockMutationRule<T> {
+    fn match_len(&self) -> usize {
+        self.match_len
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ArbReplaceRule<T> {
     remove_idx: usize,
@@ -1311,6 +1318,7 @@ fn prep_replace_rule<T: Clone>(
         matcher: MockMutationRule {
             matches: vec![(match_val.clone(), match_idx)],
             matches_at: vec![match_val.clone()],
+            match_len: repl_args.remove_len,
         },
         remove_idx: repl_args.remove_idx,
         remove_len: repl_args.remove_len,
@@ -1421,7 +1429,9 @@ fn test_replace_rule_set_for_each_match(matches: Vec<(Vec<u8>, usize)>) -> bool 
         matches,
         ..Default::default()
     };
-    collect_matches(&ReplaceRuleSet::from(rule.clone()), &[]) == collect_matches(&rule, &[])
+    let mut rule_set = ReplaceRuleSet::new();
+    rule_set.add_any_rule(rule.clone());
+    collect_matches(&rule_set, &[]) == collect_matches(&rule, &[])
 }
 
 #[quickcheck]
@@ -1430,19 +1440,19 @@ fn test_replace_rule_set_for_each_match_at(matches_at: Vec<Vec<u8>>) -> bool {
         matches_at,
         ..Default::default()
     };
-    collect_matches_at(&ReplaceRuleSet::from(rule.clone()), 0, &[])
-        == collect_matches_at(&rule, 0, &[])
+    let mut rule_set = ReplaceRuleSet::new();
+    rule_set.add_any_rule(rule.clone());
+    collect_matches_at(&rule_set, 0, &[]) == collect_matches_at(&rule, 0, &[])
 }
 
 #[test]
-fn test_replace_rule_cost_set_add() -> Result<()> {
+fn test_replace_rule_cost_set_add_any() {
     let rule: MockMutationRule<i32> = Default::default();
     let mut rule_set = ReplaceRuleCostSet::new();
     let cost: Cost = 3;
-    rule_set.add_rule(rule.clone(), cost);
+    rule_set.add_any_rule(rule.clone(), cost);
     let idx = rule_set.costs.iter().position(|&c| c == cost).unwrap();
-    assert!(rule_set.rules[idx].rules.contains(&rule));
-    Ok(())
+    assert!(rule_set.rules[idx].any_rules.contains(&rule));
 }
 
 #[quickcheck]

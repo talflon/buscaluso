@@ -771,9 +771,10 @@ impl<M: MutationRule> MutationRule for StartAnchoredRule<M> {
         action: F,
         result_buf: &mut Vec<Self::Alph>,
     ) {
-        debug_assert!(word_idx == 0);
-        self.0
-            .for_each_match_at_using(word, word_idx, action, result_buf);
+        if word_idx == 0 {
+            self.0
+                .for_each_match_at_using(word, word_idx, action, result_buf);
+        }
     }
 
     fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
@@ -782,7 +783,8 @@ impl<M: MutationRule> MutationRule for StartAnchoredRule<M> {
         mut action: F,
         result_buf: &mut Vec<Self::Alph>,
     ) {
-        self.for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
+        self.0
+            .for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
     }
 }
 
@@ -808,9 +810,10 @@ impl<M: FixedLenRule> MutationRule for EndAnchoredRule<M> {
         action: F,
         result_buf: &mut Vec<Self::Alph>,
     ) {
-        debug_assert!(word_idx + self.match_len() == word.len());
-        self.0
-            .for_each_match_at_using(word, word_idx, action, result_buf);
+        if word_idx + self.match_len() == word.len() {
+            self.0
+                .for_each_match_at_using(word, word_idx, action, result_buf);
+        }
     }
 
     fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
@@ -820,7 +823,7 @@ impl<M: FixedLenRule> MutationRule for EndAnchoredRule<M> {
         result_buf: &mut Vec<Self::Alph>,
     ) {
         if let Some(word_idx) = word.len().checked_sub(self.match_len()) {
-            self.for_each_match_at_using(
+            self.0.for_each_match_at_using(
                 word,
                 word_idx,
                 |result_buf| action(result_buf, word_idx),
@@ -852,9 +855,10 @@ impl<M: FixedLenRule> MutationRule for BothAnchoredRule<M> {
         action: F,
         result_buf: &mut Vec<Self::Alph>,
     ) {
-        debug_assert!(word_idx == 0 && self.match_len() == word.len());
-        self.0
-            .for_each_match_at_using(word, word_idx, action, result_buf);
+        if word_idx == 0 && self.match_len() == word.len() {
+            self.0
+                .for_each_match_at_using(word, word_idx, action, result_buf);
+        }
     }
 
     fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
@@ -864,7 +868,8 @@ impl<M: FixedLenRule> MutationRule for BothAnchoredRule<M> {
         result_buf: &mut Vec<Self::Alph>,
     ) {
         if self.match_len() == word.len() {
-            self.for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
+            self.0
+                .for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
         }
     }
 }
@@ -881,35 +886,35 @@ where
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
-struct ReplaceRuleSet<M: MutationRule> {
-    rules: Vec<M>,
+struct ReplaceRuleSet<M: FixedLenRule> {
+    any_rules: Vec<M>,
+    start_rules: Vec<StartAnchoredRule<M>>,
+    end_rules: Vec<EndAnchoredRule<M>>,
+    both_rules: Vec<BothAnchoredRule<M>>,
 }
 
-impl<M: MutationRule> ReplaceRuleSet<M> {
+impl<M: FixedLenRule> ReplaceRuleSet<M> {
     fn new() -> ReplaceRuleSet<M> {
-        ReplaceRuleSet { rules: Vec::new() }
+        ReplaceRuleSet {
+            any_rules: Vec::new(),
+            start_rules: Vec::new(),
+            end_rules: Vec::new(),
+            both_rules: Vec::new(),
+        }
     }
 
-    fn add_rule(&mut self, rule: M) {
-        self.rules.push(rule);
+    fn add_any_rule(&mut self, rule: M) {
+        self.any_rules.push(rule);
     }
 }
 
-impl<M: MutationRule> Default for ReplaceRuleSet<M> {
+impl<M: FixedLenRule> Default for ReplaceRuleSet<M> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<M: MutationRule> From<M> for ReplaceRuleSet<M> {
-    fn from(rule: M) -> Self {
-        let mut set = Self::new();
-        set.add_rule(rule);
-        set
-    }
-}
-
-impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
+impl<M: FixedLenRule> MutationRule for ReplaceRuleSet<M> {
     type Alph = M::Alph;
 
     fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
@@ -919,8 +924,19 @@ impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
         mut action: F,
         result_buf: &mut Vec<Self::Alph>,
     ) {
-        for rule in &self.rules {
+        for rule in &self.any_rules {
             rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+        }
+        for rule in &self.end_rules {
+            rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+        }
+        if word_idx == 0 {
+            for rule in &self.start_rules {
+                rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+            }
+            for rule in &self.both_rules {
+                rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+            }
         }
     }
 
@@ -930,7 +946,16 @@ impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
         mut action: F,
         result_buf: &mut Vec<Self::Alph>,
     ) {
-        for rule in &self.rules {
+        for rule in &self.any_rules {
+            rule.for_each_match_using(word, &mut action, result_buf);
+        }
+        for rule in &self.start_rules {
+            rule.for_each_match_using(word, &mut action, result_buf);
+        }
+        for rule in &self.end_rules {
+            rule.for_each_match_using(word, &mut action, result_buf);
+        }
+        for rule in &self.both_rules {
             rule.for_each_match_using(word, &mut action, result_buf);
         }
     }
@@ -939,12 +964,12 @@ impl<M: MutationRule> MutationRule for ReplaceRuleSet<M> {
 type MutRule = ReplaceRule<Box<[FonSet]>>;
 
 #[derive(Debug, Clone)]
-struct ReplaceRuleCostSet<M: MutationRule> {
+struct ReplaceRuleCostSet<M: FixedLenRule> {
     costs: Vec<Cost>,
     rules: Vec<ReplaceRuleSet<M>>,
 }
 
-impl<M: MutationRule> ReplaceRuleCostSet<M> {
+impl<M: FixedLenRule> ReplaceRuleCostSet<M> {
     fn new() -> ReplaceRuleCostSet<M> {
         ReplaceRuleCostSet {
             costs: Vec::new(),
@@ -963,9 +988,9 @@ impl<M: MutationRule> ReplaceRuleCostSet<M> {
         }
     }
 
-    fn add_rule(&mut self, rule: M, cost: Cost) {
+    fn add_any_rule(&mut self, rule: M, cost: Cost) {
         let idx = self.add_cost_idx(cost);
-        self.rules[idx].add_rule(rule);
+        self.rules[idx].add_any_rule(rule);
     }
 
     fn is_empty(&self) -> bool {
@@ -1050,11 +1075,11 @@ impl BuscaCfg {
                 let from = self.resolve_mutation_item_set_seq(&from)?;
                 let to = self.resolve_mutation_item_set_seq(&to)?;
                 let lookahead = self.resolve_lookaround_item_set_seq(&after)?;
-                self.mutation_rules.add_rule(
+                self.mutation_rules.add_any_rule(
                     create_replace_rule(&lookbehind, &from, &to, &lookahead)?,
                     cost,
                 );
-                self.mutation_rules.add_rule(
+                self.mutation_rules.add_any_rule(
                     create_replace_rule(&lookbehind, &to, &from, &lookahead)?,
                     cost,
                 );
