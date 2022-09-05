@@ -3,8 +3,7 @@ pub mod tests;
 
 use std::fmt::Debug;
 
-use crate::FonError::*;
-use crate::Result;
+use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 #[repr(transparent)]
