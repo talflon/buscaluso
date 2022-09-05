@@ -1221,44 +1221,32 @@ pub struct Busca<'a> {
     already_visited: BTreeSet<Box<[FonSet]>>,
     to_output: Vec<(&'a str, Cost)>,
     already_output: BTreeSet<&'a str>,
-    current_node: Option<BuscaNode>,
-    later_nodes: BinaryHeap<BuscaNode>,
+    nodes: BinaryHeap<BuscaNode>,
 }
 
 impl<'a> Busca<'a> {
     fn new(cfg: &'a BuscaCfg, word: &[FonSet]) -> Busca<'a> {
         let mut busca = Busca {
             cfg,
-            current_node: Some(BuscaNode::new(cfg, word, 0)),
             already_visited: BTreeSet::new(),
             already_output: BTreeSet::new(),
             to_output: Vec::new(),
-            later_nodes: BinaryHeap::new(),
+            nodes: BinaryHeap::new(),
         };
-        busca.visit_fonsetseq(word, 0);
+        busca.add_node(word, 0);
         busca
     }
 
     fn search_current(&mut self) {
-        let mut current_node = self.current_node.take().unwrap();
-        self.cfg.mutation_rules.rules[current_node.cost_idx]
-            .for_each_match(&*current_node.word, |result, _| {
-                self.add_node(result, current_node.total_cost)
-            });
-        if let Some(new_cost) = current_node.inc_cost(self.cfg) {
-            if let Some(lowest_later_node) = self.later_nodes.peek() {
-                if new_cost > lowest_later_node.total_cost {
-                    self.current_node = self.later_nodes.pop();
-                    self.later_nodes.push(current_node);
-                } else {
-                    self.current_node = Some(current_node);
-                }
-            } else {
-                self.current_node = Some(current_node);
+        if let Some(mut current_node) = self.nodes.pop() {
+            self.cfg.mutation_rules.rules[current_node.cost_idx]
+                .for_each_match(&*current_node.word, |result, _| {
+                    self.add_node(result, current_node.total_cost)
+                });
+            if current_node.inc_cost(self.cfg).is_some() {
+                self.nodes.push(current_node);
             }
-        } else {
-            self.current_node = self.later_nodes.pop();
-        }
+        };
     }
 
     fn visit_fonsetseq(&mut self, word_fonsetseq: &[FonSet], cost: Cost) -> bool {
@@ -1285,7 +1273,7 @@ impl<'a> Busca<'a> {
 
     fn add_node(&mut self, word_fonsetseq: &[FonSet], cost: Cost) {
         if self.visit_fonsetseq(word_fonsetseq, cost) {
-            self.later_nodes
+            self.nodes
                 .push(BuscaNode::new(self.cfg, word_fonsetseq, cost));
         }
     }
@@ -1296,7 +1284,7 @@ impl<'a> Iterator for Busca<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.to_output.is_empty() {
-            if self.current_node.is_none() {
+            if self.nodes.is_empty() {
                 return None;
             }
             self.search_current();
