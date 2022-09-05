@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::fmt::Debug;
 use std::io;
 use std::io::BufRead;
 
@@ -65,7 +66,7 @@ pub const NO_FON: Fon = Fon { id: 0 };
 
 pub const NO_FON_CHAR: char = '_';
 
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, PartialOrd, Ord, Hash)]
 pub struct FonSet {
     bits: u128,
 }
@@ -296,6 +297,12 @@ impl std::ops::SubAssign for FonSet {
 impl std::ops::SubAssign<Fon> for FonSet {
     fn sub_assign(&mut self, rhs: Fon) {
         *self -= FonSet::from(rhs)
+    }
+}
+
+impl Debug for FonSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter().map(|f| f.id)).finish()
     }
 }
 
