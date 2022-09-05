@@ -883,7 +883,7 @@ where
     }
 }
 
-pub type Cost = i32;
+pub type Cost = u32;
 
 #[derive(Debug, Clone)]
 struct ReplaceRuleSet<M: FixedLenRule> {
