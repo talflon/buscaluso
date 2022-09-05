@@ -1481,6 +1481,46 @@ fn test_end_anchored_fonsetseq_rule(word: NonEmptyFonSetSeq, pattern: NonEmptyFo
 }
 
 #[test]
+fn test_both_anchored_fonsetseq_rule_same_len() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        collect_matches(
+            &BothAnchoredRule(reg.setseq(&["ab", "cd", "ef"])?),
+            &reg.setseq(&["b", "c", "e"])?
+        ),
+        vec![(reg.setseq(&["b", "c", "e"])?, 0)]
+    );
+    assert_eq!(
+        collect_matches(
+            &BothAnchoredRule(reg.setseq(&["ab", "cd"])?),
+            &reg.setseq(&["a", "b"])?
+        ),
+        vec![]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_both_anchored_fonsetseq_rule_longer_rule() {
+    let f = FonSet::from(Fon::from(5u8));
+    assert_eq!(collect_matches(&BothAnchoredRule(vec![f, f]), &[f]), vec![]);
+    assert_eq!(
+        collect_matches(&BothAnchoredRule(vec![f, f, f]), &[f, f]),
+        vec![]
+    );
+}
+
+#[test]
+fn test_both_anchored_fonsetseq_rule_longer_word() {
+    let f = FonSet::from(Fon::from(5u8));
+    assert_eq!(collect_matches(&BothAnchoredRule(vec![f]), &[f, f]), vec![]);
+    assert_eq!(
+        collect_matches(&BothAnchoredRule(vec![f, f]), &[f, f, f]),
+        vec![]
+    );
+}
+
+#[test]
 fn test_sliceset_with_fon_set_seq() -> Result<()> {
     let mut set: BTreeSet<Box<[FonSet]>> = BTreeSet::new();
     let mut reg = FonRegistry::new();

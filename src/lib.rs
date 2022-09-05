@@ -839,6 +839,45 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
+struct BothAnchoredRule<M: FixedLenRule>(M);
+
+impl<M: FixedLenRule> MutationRule for BothAnchoredRule<M> {
+    type Alph = M::Alph;
+
+    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+        &self,
+        word: &[Self::Alph],
+        word_idx: usize,
+        action: F,
+        result_buf: &mut Vec<Self::Alph>,
+    ) {
+        debug_assert!(word_idx == 0 && self.match_len() == word.len());
+        self.0
+            .for_each_match_at_using(word, word_idx, action, result_buf);
+    }
+
+    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+        &self,
+        word: &[Self::Alph],
+        mut action: F,
+        result_buf: &mut Vec<Self::Alph>,
+    ) {
+        if self.match_len() == word.len() {
+            self.for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
+        }
+    }
+}
+
+impl<M> FixedLenRule for BothAnchoredRule<M>
+where
+    M: FixedLenRule,
+{
+    fn match_len(&self) -> usize {
+        self.0.match_len()
+    }
+}
+
 pub type Cost = i32;
 
 #[derive(Debug, Clone)]
