@@ -82,66 +82,74 @@ where
     }
 }
 
+fn collect_words_normalized<'a>(dict: &'a BTreeDictionary, normalized: &[Fon]) -> Vec<&'a str> {
+    let mut results = Vec::new();
+    dict.for_each_word_normalized(normalized, |s| results.push(s));
+    results
+}
+
+fn sorted<T: Ord>(mut vec: Vec<T>) -> Vec<T> {
+    vec.sort();
+    vec
+}
+
 #[test]
-fn test_dictionary_one_key() -> Result<()> {
+fn test_dictionary_one_key() {
     let normalized = &[Fon::from(8u8), Fon::from(2u8)];
-    let mut cfg = BuscaCfg::new();
-    assert_eq!(Vec::from_iter(cfg.words_iter(normalized)), &[] as &[&str]);
+    let mut dict = BTreeDictionary::new();
+    assert_eq!(collect_words_normalized(&dict, normalized), &[] as &[&str]);
 
-    cfg.add_to_dictionary("first", normalized)?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(normalized)), &["first"]);
+    dict.add_word(normalized, "first");
+    assert_eq!(collect_words_normalized(&dict, normalized), &["first"]);
 
-    cfg.add_to_dictionary("another", normalized)?;
+    dict.add_word(normalized, "another");
     assert_eq!(
-        BTreeSet::from_iter(cfg.words_iter(normalized)),
-        BTreeSet::from(["another", "first"])
+        sorted(collect_words_normalized(&dict, normalized)),
+        &["another", "first"]
     );
-    Ok(())
 }
 
 #[test]
-fn test_dictionary_two_keys() -> Result<()> {
+fn test_dictionary_two_keys() {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)];
     let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)];
-    let mut cfg = BuscaCfg::new();
-    cfg.add_to_dictionary("first", norm1)?;
-    cfg.add_to_dictionary("another", norm1)?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(norm2)), &[] as &[&str]);
+    let mut dict = BTreeDictionary::new();
+    dict.add_word(norm1, "first");
+    dict.add_word(norm1, "another");
+    assert_eq!(collect_words_normalized(&dict, norm2), &[] as &[&str]);
 
-    cfg.add_to_dictionary("word", norm2)?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(norm2)), &["word"]);
+    dict.add_word(norm2, "word");
+    assert_eq!(collect_words_normalized(&dict, norm2), &["word"]);
 
     assert_eq!(
-        BTreeSet::from_iter(cfg.words_iter(norm1)),
-        BTreeSet::from(["another", "first"])
+        sorted(collect_words_normalized(&dict, norm1)),
+        &["another", "first"]
     );
-    Ok(())
 }
 
 #[test]
-fn test_dictionary_duplicate_one_key() -> Result<()> {
+fn test_dictionary_duplicate_one_key() {
     let key = &[Fon::from(33u8)];
-    let mut cfg = BuscaCfg::new();
-    assert_eq!(Vec::from_iter(cfg.words_iter(key)), &[] as &[&str]);
+    let mut dict = BTreeDictionary::new();
+    assert_eq!(collect_words_normalized(&dict, key), &[] as &[&str]);
 
-    cfg.add_to_dictionary("value", key)?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(key)), &["value"]);
-    cfg.add_to_dictionary("value", key)?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(key)), &["value"]);
-    Ok(())
+    dict.add_word(key, "value");
+    assert_eq!(collect_words_normalized(&dict, key), &["value"]);
+    dict.add_word(key, "value");
+    assert_eq!(collect_words_normalized(&dict, key), &["value"]);
 }
 
 #[test]
-fn test_dictionary_duplicate_two_keys() -> Result<()> {
+fn test_dictionary_duplicate_two_keys() {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)];
     let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)];
-    let mut cfg = BuscaCfg::new();
-    cfg.add_to_dictionary("same", norm1)?;
-    cfg.add_to_dictionary("same", norm2)?;
-    assert_eq!(Vec::from_iter(cfg.words_iter(norm1)), &["same"]);
-    assert_eq!(Vec::from_iter(cfg.words_iter(norm2)), &["same"]);
-    Ok(())
+    let mut dict = BTreeDictionary::new();
+    dict.add_word(norm1, "same");
+    dict.add_word(norm2, "same");
+    assert_eq!(collect_words_normalized(&dict, norm1), &["same"]);
+    assert_eq!(collect_words_normalized(&dict, norm2), &["same"]);
 }
+
 #[test]
 fn test_buscacfg_normalize() -> Result<()> {
     let mut cfg = BuscaCfg::new();
@@ -165,7 +173,7 @@ fn test_buscacfg_search_word_in_dictionary_comes_first() -> Result<()> {
     for c in word.chars() {
         cfg.fon_registry.add(c)?;
     }
-    cfg.add_to_dictionary(word, &cfg.normalize(word)?)?;
+    cfg.dictionary.add_word(&cfg.normalize(word)?, word);
     assert_eq!(cfg.search(word)?.flatten().next(), Some((word, 0)));
     Ok(())
 }

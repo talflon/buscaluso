@@ -81,7 +81,7 @@ impl<T: Ord + Copy> SliceSet<T> for BTreeSet<Box<[T]>> {
 #[derive(Debug, Clone)]
 pub struct BuscaCfg {
     fon_registry: FonRegistry,
-    dictionary: BTreeMap<Box<[Fon]>, Vec<Box<str>>>,
+    dictionary: BTreeDictionary,
     normalize_rules: NormalizeRuleSet,
     aliases: BTreeMap<String, FonSet>,
     mutation_rules: ReplaceRuleCostSet<MutRule>,
@@ -91,7 +91,7 @@ impl BuscaCfg {
     pub fn new() -> BuscaCfg {
         BuscaCfg {
             fon_registry: FonRegistry::new(),
-            dictionary: BTreeMap::new(),
+            dictionary: BTreeDictionary::new(),
             normalize_rules: NormalizeRuleSet::new(),
             aliases: BTreeMap::new(),
             mutation_rules: ReplaceRuleCostSet::new(),
@@ -241,38 +241,17 @@ impl BuscaCfg {
         Ok(output)
     }
 
-    pub fn add_to_dictionary(&mut self, word: &str, normalized: &[Fon]) -> Result<()> {
-        match self.dictionary.get_mut(normalized) {
-            Some(words) => {
-                if !words.iter().any(|w| w.as_ref() == word) {
-                    words.push(word.into());
-                }
-            }
-            None => {
-                self.dictionary.insert(normalized.into(), vec![word.into()]);
-            }
-        }
-        Ok(())
-    }
-
     pub fn load_dictionary<R: BufRead>(&mut self, mut input: R) -> Result<()> {
         let mut line = String::new();
         let mut normalized = Vec::new();
         while input.read_line(&mut line)? > 0 {
             let word = line.trim();
             self.normalize_into(word, &mut normalized)?;
-            self.add_to_dictionary(word, &normalized)?;
+            self.dictionary.add_word(&normalized, word);
             line.clear();
             normalized.clear();
         }
         Ok(())
-    }
-
-    pub fn words_iter(&self, fonseq: &[Fon]) -> impl Iterator<Item = &str> {
-        self.dictionary
-            .get(fonseq)
-            .into_iter()
-            .flat_map(|v| v.iter().map(Box::borrow))
     }
 
     pub fn search(&self, word: &str) -> Result<Busca> {
@@ -377,17 +356,11 @@ impl<'a> Busca<'a> {
     fn visit_fonsetseq(&mut self, word_fonsetseq: &[FonSet], cost: Cost) -> bool {
         let is_new = self.already_visited.add_slice(word_fonsetseq);
         if is_new {
-            FonSet::seq_for_each_fon_seq(word_fonsetseq, |word_fonseq| {
-                self.visit_fonseq(word_fonseq, cost)
-            });
+            self.cfg
+                .dictionary
+                .for_each_word_matching(word_fonsetseq, |word_str| self.visit_str(word_str, cost));
         }
         is_new
-    }
-
-    fn visit_fonseq(&mut self, word_fonseq: &[Fon], cost: Cost) {
-        for word_str in self.cfg.words_iter(word_fonseq) {
-            self.visit_str(word_str, cost);
-        }
     }
 
     fn visit_str(&mut self, word_str: &'a str, cost: Cost) {
@@ -443,5 +416,52 @@ where
                 break;
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BTreeDictionary {
+    words: BTreeMap<Box<[Fon]>, Vec<Box<str>>>,
+}
+
+impl BTreeDictionary {
+    fn new() -> Self {
+        BTreeDictionary {
+            words: BTreeMap::new(),
+        }
+    }
+
+    fn add_word(&mut self, normalized: &[Fon], word: &str) {
+        match self.words.get_mut(normalized) {
+            Some(words) => {
+                if !words.iter().any(|w| w.as_ref() == word) {
+                    words.push(word.into());
+                }
+            }
+            None => {
+                self.words.insert(normalized.into(), vec![word.into()]);
+            }
+        }
+    }
+
+    fn for_each_word_normalized<'a, F>(&'a self, fonseq: &[Fon], action: F)
+    where
+        F: FnMut(&'a str),
+    {
+        self.words
+            .get(fonseq)
+            .iter()
+            .flat_map(|v| v.iter())
+            .map(Borrow::borrow)
+            .for_each(action);
+    }
+
+    fn for_each_word_matching<'a, F>(&'a self, fonsetseq: &[FonSet], mut action: F)
+    where
+        F: FnMut(&'a str),
+    {
+        FonSet::seq_for_each_fon_seq(fonsetseq, |fonseq| {
+            self.for_each_word_normalized(fonseq, &mut action)
+        });
     }
 }
