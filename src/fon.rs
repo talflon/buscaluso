@@ -5,13 +5,15 @@ use std::fmt::Debug;
 
 use crate::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-#[repr(transparent)]
-pub struct Fon {
-    id: u8,
-}
+pub type FonId = u8;
 
-pub const MAX_FON_ID: u8 = 127;
+#[cfg(feature = "fons128")]
+type FonSetBitSet = u128;
+
+#[cfg(not(feature = "fons128"))]
+type FonSetBitSet = u64;
+
+pub const MAX_FON_ID: FonId = (FonSetBitSet::BITS - 1) as FonId;
 
 pub const MAX_FONS: usize = MAX_FON_ID as usize + 1;
 
@@ -19,13 +21,19 @@ pub const NO_FON: Fon = Fon { id: 0 };
 
 pub const NO_FON_CHAR: char = '_';
 
-#[derive(Clone, Copy, PartialEq, Eq, Default, PartialOrd, Ord, Hash)]
-pub struct FonSet {
-    bits: u128,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+#[repr(transparent)]
+pub struct Fon {
+    id: FonId,
 }
 
-impl From<u8> for Fon {
-    fn from(id: u8) -> Self {
+#[derive(Clone, Copy, PartialEq, Eq, Default, PartialOrd, Ord, Hash)]
+pub struct FonSet {
+    bits: FonSetBitSet,
+}
+
+impl From<FonId> for Fon {
+    fn from(id: FonId) -> Self {
         debug_assert!(id <= MAX_FON_ID);
         Fon { id }
     }
@@ -34,7 +42,7 @@ impl From<u8> for Fon {
 impl From<usize> for Fon {
     fn from(i: usize) -> Self {
         debug_assert!(i < MAX_FONS);
-        Fon { id: i as u8 }
+        Fon { id: i as FonId }
     }
 }
 
@@ -274,7 +282,7 @@ impl Iterator for FonSetIter {
             let zeros = self.fonset.bits.trailing_zeros();
             self.index += zeros as usize;
             let item = Some(Fon {
-                id: self.index as u8,
+                id: self.index as FonId,
             });
             self.fonset.bits >>= zeros;
             self.fonset.bits >>= 1;
@@ -362,7 +370,8 @@ impl FonRegistry {
     }
 
     pub fn get_fon_char(&self, fon: Fon) -> Result<char> {
-        self.try_get_fon_char(fon).ok_or(NoSuchFonId(fon.id))
+        self.try_get_fon_char(fon)
+            .ok_or_else(|| NoSuchFonId(fon.id.into()))
     }
 
     pub fn mark(&self) -> FonRegistryMark {

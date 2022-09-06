@@ -102,7 +102,7 @@ fn test_dictionary_one_key() -> Result<()> {
 #[test]
 fn test_dictionary_two_keys() -> Result<()> {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)];
-    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(91u8)];
+    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)];
     let mut cfg = BuscaCfg::new();
     cfg.add_to_dictionary("first", norm1)?;
     cfg.add_to_dictionary("another", norm1)?;
@@ -134,7 +134,7 @@ fn test_dictionary_duplicate_one_key() -> Result<()> {
 #[test]
 fn test_dictionary_duplicate_two_keys() -> Result<()> {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)];
-    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(91u8)];
+    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)];
     let mut cfg = BuscaCfg::new();
     cfg.add_to_dictionary("same", norm1)?;
     cfg.add_to_dictionary("same", norm2)?;
@@ -377,7 +377,7 @@ fn test_for_cartesian_product() -> Result<()> {
 
 #[test]
 fn test_for_cartesian_product_len() {
-    fn for_cartesian_product_len_is_product(items: Vec<Vec<u8>>) -> TestResult {
+    fn for_cartesian_product_len_is_product(items: Vec<Vec<FonId>>) -> TestResult {
         let expected_len: usize = items.iter().map(Vec::len).product();
         if items.is_empty() || expected_len == 0 || expected_len > 10_000 {
             TestResult::discard()
@@ -398,7 +398,7 @@ fn test_for_cartesian_product_len() {
 
 #[test]
 fn test_for_cartesian_product_contains_samples() {
-    fn for_cartesian_product_contains_samples(items: Vec<Vec<u8>>) -> TestResult {
+    fn for_cartesian_product_contains_samples(items: Vec<Vec<FonId>>) -> TestResult {
         let expected_len: usize = items.iter().map(Vec::len).product();
         if items.is_empty() || expected_len == 0 || expected_len > 10_000 {
             TestResult::discard()

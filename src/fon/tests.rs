@@ -9,7 +9,7 @@ use quickcheck_macros::*;
 impl Arbitrary for Fon {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
         Fon {
-            id: u8::arbitrary(g) % MAX_FON_ID,
+            id: FonId::arbitrary(g) % MAX_FON_ID,
         }
     }
 }
@@ -17,7 +17,7 @@ impl Arbitrary for Fon {
 impl Arbitrary for FonSet {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
         FonSet {
-            bits: u128::arbitrary(g),
+            bits: FonSetBitSet::arbitrary(g),
         }
     }
 }
@@ -28,7 +28,7 @@ pub struct SmallFonSet(FonSet);
 impl Arbitrary for SmallFonSet {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
         SmallFonSet(FonSet {
-            bits: u16::arbitrary(g) as u128,
+            bits: u16::arbitrary(g) as FonSetBitSet,
         })
     }
 }
@@ -102,7 +102,7 @@ fn test_fon_registry_empty() {
         assert!(matches!(reg.get_fon(c), Err(NoSuchFon(c_)) if c_ == c));
     }
     for i in [1, 2, 35, MAX_FON_ID] {
-        assert!(matches!(reg.get_fon_char(Fon::from(i)), Err(NoSuchFonId(i_)) if i_ == i));
+        assert!(matches!(reg.get_fon_char(Fon::from(i)), Err(NoSuchFonId(i_)) if i_ == i.into()));
     }
 }
 
@@ -119,13 +119,16 @@ fn test_fon_registry_has_no_fon() -> Result<()> {
 }
 
 #[quickcheck]
-fn test_fon_registry_add(chars: Vec<char>) -> Result<()> {
+fn test_fon_registry_add(chars: Vec<char>) -> Result<TestResult> {
+    if chars.len() > MAX_FONS - 1 {
+        return Ok(TestResult::discard());
+    }
     let mut reg = FonRegistry::new();
     for c in chars {
         reg.add(c)?;
         assert_eq!(reg.get_fon_char(reg.get_fon(c)?)?, c);
     }
-    Ok(())
+    Ok(TestResult::passed())
 }
 
 #[test]
@@ -174,7 +177,7 @@ fn test_fonset_real() {
     s -= Fon::from(12u8);
     assert!(!s.is_real());
     s |= Fon::from(3u8);
-    s |= Fon::from(101u8);
+    s |= Fon::from(61u8);
     assert!(!s.is_real());
     s -= NO_FON;
     assert!(s.is_real());
@@ -317,12 +320,12 @@ fn test_fonsetseq_real() {
     assert!(!FonSet::seq_is_real(&[
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(NO_FON),
-        FonSet::from(Fon::from(80u8)),
+        FonSet::from(Fon::from(50u8)),
     ]));
     assert!(FonSet::seq_is_real(&[
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::EMPTY,
-        FonSet::from(Fon::from(80u8)),
+        FonSet::from(Fon::from(50u8)),
     ]));
 }
 
@@ -334,17 +337,17 @@ fn test_fonsetseq_valid() {
     assert!(!FonSet::seq_is_valid(&[
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(NO_FON),
-        FonSet::from(Fon::from(80u8)),
+        FonSet::from(Fon::from(50u8)),
     ]));
     assert!(FonSet::seq_is_valid(&[
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::EMPTY,
-        FonSet::from(Fon::from(80u8)),
+        FonSet::from(Fon::from(50u8)),
     ]));
     assert!(FonSet::seq_is_valid(&[
         FonSet::from(NO_FON),
         FonSet::from([2u8.into(), 3u8.into()]),
-        FonSet::from(Fon::from(80u8)),
+        FonSet::from(Fon::from(50u8)),
         FonSet::from(NO_FON)
     ]));
 }

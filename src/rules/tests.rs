@@ -242,9 +242,9 @@ fn match_at_mock_replace_rule<T: Clone>(
 
 #[quickcheck]
 fn replace_rule_for_each_match_inserts(
-    match_val: Vec<u8>,
+    match_val: Vec<FonId>,
     match_idx: u8,
-    repl_args: ArbReplaceRule<u8>,
+    repl_args: ArbReplaceRule<FonId>,
 ) -> TestResult {
     let match_idx = match_idx as usize;
     if let Some(result) = match_mock_replace_rule(match_val, match_idx, repl_args.clone()) {
@@ -258,9 +258,9 @@ fn replace_rule_for_each_match_inserts(
 
 #[quickcheck]
 fn replace_rule_for_each_match_at_inserts(
-    match_val: Vec<u8>,
+    match_val: Vec<FonId>,
     match_idx: u8,
-    repl_args: ArbReplaceRule<u8>,
+    repl_args: ArbReplaceRule<FonId>,
 ) -> TestResult {
     let match_idx = match_idx as usize;
     if let Some(result) = match_at_mock_replace_rule(match_val, match_idx, repl_args.clone()) {
@@ -274,9 +274,9 @@ fn replace_rule_for_each_match_at_inserts(
 
 #[quickcheck]
 fn replace_rule_for_each_match_removes(
-    match_val: Vec<u8>,
+    match_val: Vec<FonId>,
     match_idx: u8,
-    repl_args: ArbReplaceRule<u8>,
+    repl_args: ArbReplaceRule<FonId>,
 ) -> TestResult {
     let match_idx = match_idx as usize;
     if let Some(result) = match_mock_replace_rule(match_val.clone(), match_idx, repl_args.clone()) {
@@ -291,9 +291,9 @@ fn replace_rule_for_each_match_removes(
 
 #[quickcheck]
 fn replace_rule_for_each_match_at_removes(
-    match_val: Vec<u8>,
+    match_val: Vec<FonId>,
     match_idx: u8,
-    repl_args: ArbReplaceRule<u8>,
+    repl_args: ArbReplaceRule<FonId>,
 ) -> TestResult {
     let match_idx = match_idx as usize;
     if let Some(result) =
@@ -309,7 +309,7 @@ fn replace_rule_for_each_match_at_removes(
 }
 
 #[quickcheck]
-fn test_replace_rule_set_for_each_match(matches: Vec<(Vec<u8>, usize)>) -> bool {
+fn test_replace_rule_set_for_each_match(matches: Vec<(Vec<FonId>, usize)>) -> bool {
     let rule = MockMutationRule {
         matches,
         ..Default::default()
@@ -320,7 +320,7 @@ fn test_replace_rule_set_for_each_match(matches: Vec<(Vec<u8>, usize)>) -> bool 
 }
 
 #[quickcheck]
-fn test_replace_rule_set_for_each_match_at(matches_at: Vec<Vec<u8>>) -> bool {
+fn test_replace_rule_set_for_each_match_at(matches_at: Vec<Vec<FonId>>) -> bool {
     let rule = MockMutationRule {
         matches_at,
         ..Default::default()

@@ -31,7 +31,7 @@ pub enum FonError {
     NoMoreFonIds,
 
     #[error("No such fon id {0:?}")]
-    NoSuchFonId(u8),
+    NoSuchFonId(u64),
 
     #[error("Already had a normalization rule for {0:?}")]
     DuplicateNormRule(Box<[char]>),

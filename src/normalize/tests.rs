@@ -54,7 +54,7 @@ fn test_empty_ruleset_removes_end_anchors() {
 #[test]
 fn test_ruleset_add_get() -> Result<()> {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)] as &[_];
-    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(91u8)] as &[_];
+    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)] as &[_];
     let mut ruleset = NormalizeRuleSet::new();
     ruleset.add_rule(&['c'], norm1)?;
     assert_eq!(ruleset.longest_rule(), 1);
@@ -72,9 +72,9 @@ fn test_ruleset_add_get() -> Result<()> {
 #[test]
 fn test_ruleset_add_duplicate() -> Result<()> {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)];
-    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(91u8)];
+    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)];
     let norm3 = &[Fon::from(10u8)];
-    let norm4 = &[Fon::from(100u8)];
+    let norm4 = &[Fon::from(50u8)];
     let mut ruleset = NormalizeRuleSet::new();
     ruleset.add_rule(&['c'], norm1)?;
     assert!(matches!(
@@ -96,7 +96,7 @@ fn test_ruleset_add_duplicate() -> Result<()> {
 #[test]
 fn test_ruleset_find() -> Result<()> {
     let norm1 = &[Fon::from(8u8), Fon::from(2u8)] as &[_];
-    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(91u8)] as &[_];
+    let norm2 = &[Fon::from(18u8), Fon::from(7u8), Fon::from(41u8)] as &[_];
     let mut ruleset = NormalizeRuleSet::new();
     ruleset.add_rule(&['a', 'b'], norm1)?;
     ruleset.add_rule(&['c'], norm2)?;
