@@ -149,7 +149,6 @@ fn test_empty_replacement_rule() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 #[timeout(1_000)]
 fn test_start_anchor_rule() -> Result<()> {
     let mut cfg = BuscaCfg::new();
@@ -162,7 +161,6 @@ fn test_start_anchor_rule() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 #[timeout(1_000)]
 fn test_end_anchor_rule() -> Result<()> {
     let mut cfg = BuscaCfg::new();
@@ -171,5 +169,17 @@ fn test_end_anchor_rule() -> Result<()> {
     cfg.load_dictionary(dict.join("\n").as_bytes())?;
     let mut tracker = SearchTracker::from(cfg.search("xx")?);
     tracker.assert_finds("xy");
+    Ok(())
+}
+
+#[test]
+#[timeout(1_000)]
+fn test_both_anchor_rule() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    cfg.load_rules("1: _ | x > y | _".as_bytes())?;
+    let dict = vec!["x", "y"];
+    cfg.load_dictionary(dict.join("\n").as_bytes())?;
+    let mut tracker = SearchTracker::from(cfg.search("x")?);
+    tracker.assert_finds("y");
     Ok(())
 }

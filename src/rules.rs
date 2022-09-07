@@ -11,15 +11,15 @@ pub fn create_replace_rule(
     new_pattern: &[FonSet],
     lookahead: &[FonSet],
 ) -> Result<MutRule> {
-    if !FonSet::seq_is_real(&new_pattern) {
-        return Err(InvalidReplaceRule);
-    }
     let mut pattern = Vec::new();
     pattern.extend_from_slice(lookbehind);
     pattern.extend_from_slice(old_pattern);
     pattern.extend_from_slice(lookahead);
-    if pattern.is_empty() || !FonSet::seq_is_valid(&pattern) {
-        return Err(InvalidReplaceRule);
+    if FonSet::seq_is_empty(&pattern) {
+        return Err(InvalidReplaceRule(format!(
+            "pattern empty: {:?} | {:?} > {:?} | {:?}",
+            lookbehind, old_pattern, new_pattern, lookahead,
+        )));
     }
     Ok(ReplaceRule {
         matcher: pattern.into(),
@@ -27,6 +27,94 @@ pub fn create_replace_rule(
         remove_len: old_pattern.len(),
         replace_with: new_pattern.into(),
     })
+}
+
+pub fn add_replace_rules(
+    rule_set: &mut ReplaceRuleCostSet<MutRule>,
+    lookbehind: &[FonSet],
+    old_pattern: &[FonSet],
+    new_pattern: &[FonSet],
+    lookahead: &[FonSet],
+    cost: Cost,
+) -> Result<()> {
+    rule_set.add_any_rule(
+        create_replace_rule(lookbehind, old_pattern, new_pattern, lookahead)?,
+        cost,
+    );
+    rule_set.add_any_rule(
+        create_replace_rule(lookbehind, new_pattern, old_pattern, lookahead)?,
+        cost,
+    );
+    if let Some(s) = lookbehind.first() {
+        if s.contains(NO_FON) {
+            let lookbehind = &lookbehind[1..];
+            rule_set.add_start_rule(
+                StartAnchoredRule(create_replace_rule(
+                    lookbehind,
+                    new_pattern,
+                    old_pattern,
+                    lookahead,
+                )?),
+                cost,
+            );
+            rule_set.add_start_rule(
+                StartAnchoredRule(create_replace_rule(
+                    lookbehind,
+                    old_pattern,
+                    new_pattern,
+                    lookahead,
+                )?),
+                cost,
+            );
+            if let Some(s) = lookahead.last() {
+                if s.contains(NO_FON) {
+                    let lookahead = &lookahead[0..lookahead.len() - 1];
+                    rule_set.add_both_rule(
+                        BothAnchoredRule(create_replace_rule(
+                            lookbehind,
+                            new_pattern,
+                            old_pattern,
+                            lookahead,
+                        )?),
+                        cost,
+                    );
+                    rule_set.add_both_rule(
+                        BothAnchoredRule(create_replace_rule(
+                            lookbehind,
+                            old_pattern,
+                            new_pattern,
+                            lookahead,
+                        )?),
+                        cost,
+                    );
+                }
+            }
+        }
+    }
+    if let Some(s) = lookahead.last() {
+        if s.contains(NO_FON) {
+            let lookahead = &lookahead[0..lookahead.len() - 1];
+            rule_set.add_end_rule(
+                EndAnchoredRule(create_replace_rule(
+                    lookbehind,
+                    new_pattern,
+                    old_pattern,
+                    lookahead,
+                )?),
+                cost,
+            );
+            rule_set.add_end_rule(
+                EndAnchoredRule(create_replace_rule(
+                    lookbehind,
+                    old_pattern,
+                    new_pattern,
+                    lookahead,
+                )?),
+                cost,
+            );
+        }
+    }
+    Ok(())
 }
 
 pub trait MutationRule {
@@ -358,6 +446,18 @@ impl<M: FixedLenRule> ReplaceRuleSet<M> {
     pub fn add_any_rule(&mut self, rule: M) {
         self.any_rules.push(rule);
     }
+
+    pub fn add_start_rule(&mut self, rule: StartAnchoredRule<M>) {
+        self.start_rules.push(rule);
+    }
+
+    pub fn add_end_rule(&mut self, rule: EndAnchoredRule<M>) {
+        self.end_rules.push(rule);
+    }
+
+    pub fn add_both_rule(&mut self, rule: BothAnchoredRule<M>) {
+        self.both_rules.push(rule);
+    }
 }
 
 impl<M: FixedLenRule> Default for ReplaceRuleSet<M> {
@@ -441,6 +541,21 @@ impl<M: FixedLenRule> ReplaceRuleCostSet<M> {
     pub fn add_any_rule(&mut self, rule: M, cost: Cost) {
         let idx = self.add_cost_idx(cost);
         self.rules[idx].add_any_rule(rule);
+    }
+
+    pub fn add_start_rule(&mut self, rule: StartAnchoredRule<M>, cost: Cost) {
+        let idx = self.add_cost_idx(cost);
+        self.rules[idx].add_start_rule(rule);
+    }
+
+    pub fn add_end_rule(&mut self, rule: EndAnchoredRule<M>, cost: Cost) {
+        let idx = self.add_cost_idx(cost);
+        self.rules[idx].add_end_rule(rule);
+    }
+
+    pub fn add_both_rule(&mut self, rule: BothAnchoredRule<M>, cost: Cost) {
+        let idx = self.add_cost_idx(cost);
+        self.rules[idx].add_both_rule(rule);
     }
 
     pub fn is_empty(&self) -> bool {

@@ -42,8 +42,8 @@ pub enum FonError {
     #[error("No such alias {0:?}")]
     NoSuchAlias(String),
 
-    #[error("Invalid replace rule")]
-    InvalidReplaceRule,
+    #[error("Invalid replace rule: {0}")]
+    InvalidReplaceRule(String),
 
     #[error("IO error {source:?}")]
     Io {
@@ -136,14 +136,14 @@ impl BuscaCfg {
                 let from = self.resolve_mutation_item_set_seq(&from)?;
                 let to = self.resolve_mutation_item_set_seq(&to)?;
                 let lookahead = self.resolve_lookaround_item_set_seq(&after)?;
-                self.mutation_rules.add_any_rule(
-                    create_replace_rule(&lookbehind, &from, &to, &lookahead)?,
+                add_replace_rules(
+                    &mut self.mutation_rules,
+                    &lookbehind,
+                    &from,
+                    &to,
+                    &lookahead,
                     cost,
-                );
-                self.mutation_rules.add_any_rule(
-                    create_replace_rule(&lookbehind, &to, &from, &lookahead)?,
-                    cost,
-                );
+                )?;
             }
         }
         Ok(())
@@ -213,7 +213,7 @@ impl BuscaCfg {
         if result.len() == 1 && result[0] == FonSet::from(NO_FON) {
             result.clear();
         } else if !FonSet::seq_is_real(&result) {
-            return Err(InvalidReplaceRule);
+            return Err(InvalidReplaceRule("portion not \"real\"".into()));
         }
         Ok(result)
     }
