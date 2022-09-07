@@ -18,3 +18,4 @@ unicode-normalization = "0.1.21"
 [dev-dependencies]
 quickcheck = "1.0.3"
 quickcheck_macros = "1"
+ntest = "0.8.1"

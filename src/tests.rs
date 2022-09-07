@@ -4,6 +4,7 @@ use super::*;
 
 use std::collections::BTreeSet;
 
+use ntest::timeout;
 use quickcheck::{Arbitrary, QuickCheck, TestResult};
 use quickcheck_macros::*;
 
@@ -166,6 +167,7 @@ fn test_buscacfg_normalize() -> Result<()> {
 }
 
 #[test]
+#[timeout(1_000)]
 fn test_buscacfg_search_word_in_dictionary_comes_first() -> Result<()> {
     let word = "word";
     let mut cfg = BuscaCfg::new();
@@ -179,6 +181,7 @@ fn test_buscacfg_search_word_in_dictionary_comes_first() -> Result<()> {
 }
 
 #[test]
+#[timeout(1_000)]
 fn test_buscacfg_search_normalize_error() -> Result<()> {
     let mut cfg = BuscaCfg::new();
     cfg.load_rules("10: x > y".as_bytes())?;
