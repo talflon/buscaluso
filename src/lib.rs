@@ -337,20 +337,16 @@ impl<'a> Busca<'a> {
             to_output: Vec::new(),
             nodes: BinaryHeap::new(),
         };
-        busca.add_node(word, 0, Vec::new());
+        busca.add_node(word, 0, &mut Vec::new());
         busca
     }
 
-    fn search_current(
-        &mut self,
-        mut fonset_buffer: impl AsMut<Vec<FonSet>>,
-        mut fon_buffer: impl AsMut<Vec<Fon>>,
-    ) {
+    fn search_current(&mut self, fonset_buffer: &mut Vec<FonSet>, fon_buffer: &mut Vec<Fon>) {
         if let Some(mut current_node) = self.nodes.pop() {
             self.cfg.mutation_rules.rules[current_node.cost_idx].for_each_match(
                 &*current_node.word,
-                |result, _| self.add_node(result, current_node.total_cost, &mut fon_buffer),
-                fonset_buffer.as_mut(),
+                |result, _| self.add_node(result, current_node.total_cost, fon_buffer),
+                fonset_buffer,
             );
             if current_node.inc_cost(self.cfg).is_some() {
                 self.nodes.push(current_node);
@@ -362,9 +358,9 @@ impl<'a> Busca<'a> {
         &mut self,
         word_fonsetseq: &[FonSet],
         cost: Cost,
-        buffer: impl AsMut<Vec<Fon>>,
+        buffer: &mut Vec<Fon>,
     ) -> bool {
-        let is_new = self.already_visited.add_slice(word_fonsetseq.as_ref());
+        let is_new = self.already_visited.add_slice(word_fonsetseq);
         if is_new {
             self.cfg
                 .dictionary
@@ -381,7 +377,7 @@ impl<'a> Busca<'a> {
         }
     }
 
-    fn add_node(&mut self, word_fonsetseq: &[FonSet], cost: Cost, buffer: impl AsMut<Vec<Fon>>) {
+    fn add_node(&mut self, word_fonsetseq: &[FonSet], cost: Cost, buffer: &mut Vec<Fon>) {
         if self.visit_fonsetseq(word_fonsetseq, cost, buffer) {
             self.nodes
                 .push(BuscaNode::new(self.cfg, word_fonsetseq, cost));
@@ -398,8 +394,8 @@ impl<'a> Busca<'a> {
 
     fn try_next(
         &mut self,
-        fonset_buffer: impl AsMut<Vec<FonSet>>,
-        fon_buffer: impl AsMut<Vec<Fon>>,
+        fonset_buffer: &mut Vec<FonSet>,
+        fon_buffer: &mut Vec<Fon>,
     ) -> Option<Option<(&'a str, Cost)>> {
         if self.to_output.is_empty() {
             if self.nodes.is_empty() {
@@ -495,7 +491,7 @@ impl BTreeDictionary {
     fn for_each_word_matching<'a>(
         &'a self,
         fonsetseq: &[FonSet],
-        buffer: impl AsMut<Vec<Fon>>,
+        buffer: &mut Vec<Fon>,
         mut action: impl FnMut(&'a str),
     ) {
         fonsetseq.for_each_fon_seq(buffer, |fonseq| {

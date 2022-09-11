@@ -405,11 +405,11 @@ fn test_fonset_seq_for_each_fon_seq() -> Result<()> {
     let mut reg = FonRegistry::new();
     let mut seqs: Vec<Vec<Fon>> = Vec::new();
     reg.setseq(&["a"])?
-        .for_each_fon_seq(Vec::new(), |s| seqs.push(s.into()));
+        .for_each_fon_seq(&mut Vec::new(), |s| seqs.push(s.into()));
     assert_eq!(seqs, vec![reg.seq("a")?]);
     seqs.clear();
     reg.setseq(&["x", "abc", "bx"])?
-        .for_each_fon_seq(Vec::new(), |s| seqs.push(s.into()));
+        .for_each_fon_seq(&mut Vec::new(), |s| seqs.push(s.into()));
     let mut expected = vec![
         reg.seq("xab")?,
         reg.seq("xbb")?,
@@ -433,7 +433,7 @@ fn test_fonset_seq_for_each_fon_seq_len() {
             TestResult::discard()
         } else {
             let mut count: usize = 0;
-            seq.for_each_fon_seq(Vec::new(), |_| {
+            seq.for_each_fon_seq(&mut Vec::new(), |_| {
                 count += 1;
             });
             TestResult::from_bool(count == expected_len)
@@ -457,7 +457,7 @@ fn test_fonset_seq_for_each_fon_seq_contains_samples() {
             looking_for.insert(Vec::from_iter(
                 seq.iter().map(|s| s.into_iter().last().unwrap()),
             ));
-            seq.for_each_fon_seq(Vec::new(), |s| {
+            seq.for_each_fon_seq(&mut Vec::new(), |s| {
                 looking_for.remove(s);
             });
             TestResult::from_bool(looking_for.is_empty())

@@ -274,13 +274,8 @@ pub trait FonSetSeq: AsRef<[FonSet]> {
     fn is_empty_seq(&self) -> bool;
     fn is_real_seq(&self) -> bool;
     fn is_valid_seq(&self) -> bool;
-    fn for_each_fon_seq(&self, buffer: impl AsMut<Vec<Fon>>, action: impl FnMut(&[Fon]));
-    fn match_at(
-        &self,
-        word: impl FonSetSeq,
-        word_idx: usize,
-        result_buf: impl AsMut<Vec<FonSet>>,
-    ) -> bool;
+    fn for_each_fon_seq(&self, buffer: &mut Vec<Fon>, action: impl FnMut(&[Fon]));
+    fn match_at(&self, word: &[FonSet], word_idx: usize, result_buf: &mut Vec<FonSet>) -> bool;
 }
 
 impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
@@ -299,9 +294,8 @@ impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
         slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
     }
 
-    fn for_each_fon_seq(&self, mut buffer: impl AsMut<Vec<Fon>>, mut action: impl FnMut(&[Fon])) {
+    fn for_each_fon_seq(&self, buffer: &mut Vec<Fon>, mut action: impl FnMut(&[Fon])) {
         let slice = self.as_ref();
-        let buffer = buffer.as_mut();
         buffer.clear();
         buffer.extend(slice.iter().map(|fonset| fonset.first_fon().unwrap()));
         loop {
@@ -319,21 +313,15 @@ impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
         }
     }
 
-    fn match_at(
-        &self,
-        word: impl FonSetSeq,
-        word_idx: usize,
-        mut result_buf: impl AsMut<Vec<FonSet>>,
-    ) -> bool {
+    fn match_at(&self, word: &[FonSet], word_idx: usize, result_buf: &mut Vec<FonSet>) -> bool {
         let pattern = self.as_ref();
-        debug_assert!(word_idx + pattern.len() <= word.as_ref().len());
-        let result = result_buf.as_mut();
-        result.clear();
-        result.extend_from_slice(word.as_ref());
+        debug_assert!(word_idx + pattern.len() <= word.len());
+        result_buf.clear();
+        result_buf.extend_from_slice(word);
         for pattern_idx in 0..pattern.len() {
-            result[word_idx + pattern_idx] &= pattern[pattern_idx];
+            result_buf[word_idx + pattern_idx] &= pattern[pattern_idx];
         }
-        !result[word_idx..word_idx + pattern.len()].is_empty_seq()
+        !result_buf[word_idx..word_idx + pattern.len()].is_empty_seq()
     }
 }
 
