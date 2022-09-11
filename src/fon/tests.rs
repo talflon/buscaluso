@@ -299,57 +299,62 @@ fn test_fonsetseq_empty_if_any_empty(setseq: WithInsIndex<Vec<FonSet>>) {
     let index = setseq.index;
     let mut setseq = setseq.item;
     setseq.insert(index, FonSet::EMPTY);
-    assert!(FonSet::seq_is_empty(&setseq));
+    assert!(setseq.is_empty_seq());
 }
 
 #[quickcheck]
 fn test_fonsetseq_not_empty(setseq: NonEmptyFonSetSeq) -> bool {
-    !FonSet::seq_is_empty(setseq.as_ref())
+    !setseq.is_empty_seq()
 }
 
 #[test]
 fn test_fonsetseq_zero_len_empty() {
-    assert!(FonSet::seq_is_empty(&[]));
+    assert!([].is_empty_seq());
 }
 
 #[test]
 fn test_fonsetseq_real() {
-    assert!(FonSet::seq_is_real(&[]));
-    assert!(FonSet::seq_is_real(&[FonSet::EMPTY]));
-    assert!(!FonSet::seq_is_real(&[FonSet::from(NO_FON)]));
-    assert!(!FonSet::seq_is_real(&[
+    assert!([].is_real_seq());
+    assert!([FonSet::EMPTY].is_real_seq());
+    assert!(![FonSet::from(NO_FON)].is_real_seq());
+    assert!(![
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(NO_FON),
         FonSet::from(Fon::from(50u8)),
-    ]));
-    assert!(FonSet::seq_is_real(&[
+    ]
+    .is_real_seq());
+    assert!([
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::EMPTY,
         FonSet::from(Fon::from(50u8)),
-    ]));
+    ]
+    .is_real_seq());
 }
 
 #[test]
 fn test_fonsetseq_valid() {
-    assert!(FonSet::seq_is_valid(&[]));
-    assert!(FonSet::seq_is_valid(&[FonSet::EMPTY]));
-    assert!(FonSet::seq_is_valid(&[FonSet::from(NO_FON)]));
-    assert!(!FonSet::seq_is_valid(&[
+    assert!([].is_valid_seq());
+    assert!([FonSet::EMPTY].is_valid_seq());
+    assert!([FonSet::from(NO_FON)].is_valid_seq());
+    assert!(![
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(NO_FON),
         FonSet::from(Fon::from(50u8)),
-    ]));
-    assert!(FonSet::seq_is_valid(&[
+    ]
+    .is_valid_seq());
+    assert!([
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::EMPTY,
         FonSet::from(Fon::from(50u8)),
-    ]));
-    assert!(FonSet::seq_is_valid(&[
+    ]
+    .is_valid_seq());
+    assert!(&[
         FonSet::from(NO_FON),
         FonSet::from([2u8.into(), 3u8.into()]),
         FonSet::from(Fon::from(50u8)),
         FonSet::from(NO_FON)
-    ]));
+    ]
+    .is_valid_seq());
 }
 
 #[test]
@@ -399,10 +404,12 @@ fn test_fonset_next_fon_after_same_as_iter(fonset: FonSet) {
 fn test_fonset_seq_for_each_fon_seq() -> Result<()> {
     let mut reg = FonRegistry::new();
     let mut seqs: Vec<Vec<Fon>> = Vec::new();
-    FonSet::seq_for_each_fon_seq(&reg.setseq(&["a"])?, |s| seqs.push(s.into()));
+    reg.setseq(&["a"])?
+        .for_each_fon_seq(Vec::new(), |s| seqs.push(s.into()));
     assert_eq!(seqs, vec![reg.seq("a")?]);
     seqs.clear();
-    FonSet::seq_for_each_fon_seq(&reg.setseq(&["x", "abc", "bx"])?, |s| seqs.push(s.into()));
+    reg.setseq(&["x", "abc", "bx"])?
+        .for_each_fon_seq(Vec::new(), |s| seqs.push(s.into()));
     let mut expected = vec![
         reg.seq("xab")?,
         reg.seq("xbb")?,
@@ -426,7 +433,7 @@ fn test_fonset_seq_for_each_fon_seq_len() {
             TestResult::discard()
         } else {
             let mut count: usize = 0;
-            FonSet::seq_for_each_fon_seq(&seq, |_| {
+            seq.for_each_fon_seq(Vec::new(), |_| {
                 count += 1;
             });
             TestResult::from_bool(count == expected_len)
@@ -450,7 +457,7 @@ fn test_fonset_seq_for_each_fon_seq_contains_samples() {
             looking_for.insert(Vec::from_iter(
                 seq.iter().map(|s| s.into_iter().last().unwrap()),
             ));
-            FonSet::seq_for_each_fon_seq(&seq, |s| {
+            seq.for_each_fon_seq(Vec::new(), |s| {
                 looking_for.remove(s);
             });
             TestResult::from_bool(looking_for.is_empty())

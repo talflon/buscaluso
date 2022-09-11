@@ -1,7 +1,7 @@
 #[cfg(test)]
 pub mod tests;
 
-use std::fmt::Debug;
+use std::{fmt::Debug, iter::FromIterator};
 
 use crate::*;
 
@@ -84,21 +84,6 @@ impl FonSet {
         Ok(result)
     }
 
-    pub fn seq_is_empty<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
-        let slice = seq.as_ref();
-        slice.is_empty() || slice.contains(&FonSet::EMPTY)
-    }
-
-    pub fn seq_is_real<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
-        let slice = seq.as_ref();
-        slice.is_empty() || slice.iter().all(|s| s.is_real())
-    }
-
-    pub fn seq_is_valid<S: AsRef<[FonSet]> + ?Sized>(seq: &S) -> bool {
-        let slice = seq.as_ref();
-        slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
-    }
-
     pub fn first_fon(&self) -> Option<Fon> {
         self.iter().next()
     }
@@ -111,51 +96,6 @@ impl FonSet {
             }
         }
         None
-    }
-
-    pub fn seq_for_each_fon_seq<S, F>(seq: &S, mut action: F)
-    where
-        S: AsRef<[FonSet]> + ?Sized,
-        F: FnMut(&[Fon]),
-    {
-        let slice = seq.as_ref();
-        let mut buffer: Vec<Fon> = slice
-            .iter()
-            .map(|fonset| fonset.first_fon().unwrap())
-            .collect();
-        loop {
-            action(&buffer);
-            for i in (0..slice.len()).rev() {
-                if let Some(fon) = slice[i].next_fon_after(buffer[i]) {
-                    buffer[i] = fon;
-                    break;
-                } else if i == 0 {
-                    return;
-                } else {
-                    buffer[i] = slice[i].first_fon().unwrap();
-                }
-            }
-        }
-    }
-
-    pub fn seq_from_fonseq<S: IntoIterator<Item = Fon>>(seq: S) -> Vec<FonSet> {
-        seq.into_iter().map(FonSet::from).collect()
-    }
-
-    pub fn seq_match_at_into<S: AsRef<[FonSet]>>(
-        pattern: S,
-        word: &[FonSet],
-        word_idx: usize,
-        result_buf: &mut Vec<FonSet>,
-    ) -> bool {
-        let pattern = pattern.as_ref();
-        debug_assert!(word_idx + pattern.len() <= word.len());
-        result_buf.clear();
-        result_buf.extend_from_slice(word);
-        for pattern_idx in 0..pattern.len() {
-            result_buf[word_idx + pattern_idx] &= pattern[pattern_idx];
-        }
-        !FonSet::seq_is_empty(&result_buf[word_idx..word_idx + pattern.len()])
     }
 }
 
@@ -328,6 +268,77 @@ impl<'a> FromIterator<&'a Fon> for FonSet {
         }
         s
     }
+}
+
+pub trait FonSetSeq: AsRef<[FonSet]> {
+    fn is_empty_seq(&self) -> bool;
+    fn is_real_seq(&self) -> bool;
+    fn is_valid_seq(&self) -> bool;
+    fn for_each_fon_seq(&self, buffer: impl AsMut<Vec<Fon>>, action: impl FnMut(&[Fon]));
+    fn match_at(
+        &self,
+        word: impl FonSetSeq,
+        word_idx: usize,
+        result_buf: impl AsMut<Vec<FonSet>>,
+    ) -> bool;
+}
+
+impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
+    fn is_empty_seq(&self) -> bool {
+        let slice = self.as_ref();
+        slice.is_empty() || slice.contains(&FonSet::EMPTY)
+    }
+
+    fn is_real_seq(&self) -> bool {
+        let slice = self.as_ref();
+        slice.is_empty() || slice.iter().all(|s| s.is_real())
+    }
+
+    fn is_valid_seq(&self) -> bool {
+        let slice = self.as_ref();
+        slice.len() <= 1 || slice[1..slice.len() - 1].iter().all(|s| s.is_real())
+    }
+
+    fn for_each_fon_seq(&self, mut buffer: impl AsMut<Vec<Fon>>, mut action: impl FnMut(&[Fon])) {
+        let slice = self.as_ref();
+        let buffer = buffer.as_mut();
+        buffer.clear();
+        buffer.extend(slice.iter().map(|fonset| fonset.first_fon().unwrap()));
+        loop {
+            action(buffer);
+            for i in (0..slice.len()).rev() {
+                if let Some(fon) = slice[i].next_fon_after(buffer[i]) {
+                    buffer[i] = fon;
+                    break;
+                } else if i == 0 {
+                    return;
+                } else {
+                    buffer[i] = slice[i].first_fon().unwrap();
+                }
+            }
+        }
+    }
+
+    fn match_at(
+        &self,
+        word: impl FonSetSeq,
+        word_idx: usize,
+        mut result_buf: impl AsMut<Vec<FonSet>>,
+    ) -> bool {
+        let pattern = self.as_ref();
+        debug_assert!(word_idx + pattern.len() <= word.as_ref().len());
+        let result = result_buf.as_mut();
+        result.clear();
+        result.extend_from_slice(word.as_ref());
+        for pattern_idx in 0..pattern.len() {
+            result[word_idx + pattern_idx] &= pattern[pattern_idx];
+        }
+        !result[word_idx..word_idx + pattern.len()].is_empty_seq()
+    }
+}
+
+pub fn fonsetseq_from_fonseq<F: AsRef<[Fon]>>(seq: F) -> Vec<FonSet> {
+    Vec::from_iter(seq.as_ref().iter().cloned().map(FonSet::from))
 }
 
 #[derive(Clone, Debug)]

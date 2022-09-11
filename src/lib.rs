@@ -212,7 +212,7 @@ impl BuscaCfg {
         let mut result = self.resolve_rule_item_set_seq(item_sets)?;
         if result.len() == 1 && result[0] == FonSet::from(NO_FON) {
             result.clear();
-        } else if !FonSet::seq_is_real(&result) {
+        } else if !result.is_real_seq() {
             return Err(InvalidReplaceRule("portion not \"real\"".into()));
         }
         Ok(result)
@@ -225,7 +225,7 @@ impl BuscaCfg {
             .map(|items| self.resolve_rule_item_set(items))
             .collect();
         let fonsets = fonsets?;
-        if !FonSet::seq_is_valid(&fonsets) {
+        if !fonsets.is_valid_seq() {
             return Err(InvalidNormRule(rulefile::item_set_seq_to_str(rule_lhs)));
         }
 
@@ -257,7 +257,7 @@ impl BuscaCfg {
     pub fn search(&self, word: &str) -> Result<Busca> {
         Ok(Busca::new(
             self,
-            &FonSet::seq_from_fonseq(self.normalize(word)?),
+            &fonsetseq_from_fonseq(self.normalize(word)?),
         ))
     }
 }
@@ -337,28 +337,40 @@ impl<'a> Busca<'a> {
             to_output: Vec::new(),
             nodes: BinaryHeap::new(),
         };
-        busca.add_node(word, 0);
+        busca.add_node(word, 0, Vec::new());
         busca
     }
 
-    fn search_current(&mut self) {
+    fn search_current(
+        &mut self,
+        mut fonset_buffer: impl AsMut<Vec<FonSet>>,
+        mut fon_buffer: impl AsMut<Vec<Fon>>,
+    ) {
         if let Some(mut current_node) = self.nodes.pop() {
-            self.cfg.mutation_rules.rules[current_node.cost_idx]
-                .for_each_match(&*current_node.word, |result, _| {
-                    self.add_node(result, current_node.total_cost)
-                });
+            self.cfg.mutation_rules.rules[current_node.cost_idx].for_each_match(
+                &*current_node.word,
+                |result, _| self.add_node(result, current_node.total_cost, &mut fon_buffer),
+                fonset_buffer.as_mut(),
+            );
             if current_node.inc_cost(self.cfg).is_some() {
                 self.nodes.push(current_node);
             }
         };
     }
 
-    fn visit_fonsetseq(&mut self, word_fonsetseq: &[FonSet], cost: Cost) -> bool {
-        let is_new = self.already_visited.add_slice(word_fonsetseq);
+    fn visit_fonsetseq(
+        &mut self,
+        word_fonsetseq: &[FonSet],
+        cost: Cost,
+        buffer: impl AsMut<Vec<Fon>>,
+    ) -> bool {
+        let is_new = self.already_visited.add_slice(word_fonsetseq.as_ref());
         if is_new {
             self.cfg
                 .dictionary
-                .for_each_word_matching(word_fonsetseq, |word_str| self.visit_str(word_str, cost));
+                .for_each_word_matching(word_fonsetseq, buffer, |word_str| {
+                    self.visit_str(word_str, cost)
+                });
         }
         is_new
     }
@@ -369,25 +381,49 @@ impl<'a> Busca<'a> {
         }
     }
 
-    fn add_node(&mut self, word_fonsetseq: &[FonSet], cost: Cost) {
-        if self.visit_fonsetseq(word_fonsetseq, cost) {
+    fn add_node(&mut self, word_fonsetseq: &[FonSet], cost: Cost, buffer: impl AsMut<Vec<Fon>>) {
+        if self.visit_fonsetseq(word_fonsetseq, cost, buffer) {
             self.nodes
                 .push(BuscaNode::new(self.cfg, word_fonsetseq, cost));
         }
     }
-}
 
-impl<'a> Iterator for Busca<'a> {
-    type Item = Option<(&'a str, Cost)>;
+    pub fn iter<'b>(&'b mut self) -> BuscaIter<'a, 'b> {
+        BuscaIter {
+            busca: self,
+            fonset_buffer: Vec::new(),
+            fon_buffer: Vec::new(),
+        }
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn try_next(
+        &mut self,
+        fonset_buffer: impl AsMut<Vec<FonSet>>,
+        fon_buffer: impl AsMut<Vec<Fon>>,
+    ) -> Option<Option<(&'a str, Cost)>> {
         if self.to_output.is_empty() {
             if self.nodes.is_empty() {
                 return None;
             }
-            self.search_current();
+            self.search_current(fonset_buffer, fon_buffer);
         }
         Some(self.to_output.pop())
+    }
+}
+
+#[derive(Debug)]
+pub struct BuscaIter<'a, 'b> {
+    busca: &'b mut Busca<'a>,
+    fonset_buffer: Vec<FonSet>,
+    fon_buffer: Vec<Fon>,
+}
+
+impl<'a, 'b> Iterator for BuscaIter<'a, 'b> {
+    type Item = Option<(&'a str, Cost)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.busca
+            .try_next(&mut self.fonset_buffer, &mut self.fon_buffer)
     }
 }
 
@@ -456,11 +492,13 @@ impl BTreeDictionary {
             .for_each(action);
     }
 
-    fn for_each_word_matching<'a, F>(&'a self, fonsetseq: &[FonSet], mut action: F)
-    where
-        F: FnMut(&'a str),
-    {
-        FonSet::seq_for_each_fon_seq(fonsetseq, |fonseq| {
+    fn for_each_word_matching<'a>(
+        &'a self,
+        fonsetseq: &[FonSet],
+        buffer: impl AsMut<Vec<Fon>>,
+        mut action: impl FnMut(&'a str),
+    ) {
+        fonsetseq.for_each_fon_seq(buffer, |fonseq| {
             self.for_each_word_normalized(fonseq, &mut action)
         });
     }

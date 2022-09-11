@@ -176,7 +176,7 @@ fn test_buscacfg_search_word_in_dictionary_comes_first() -> Result<()> {
         cfg.fon_registry.add(c)?;
     }
     cfg.dictionary.add_word(&cfg.normalize(word)?, word);
-    assert_eq!(cfg.search(word)?.flatten().next(), Some((word, 0)));
+    assert_eq!(cfg.search(word)?.iter().flatten().next(), Some((word, 0)));
     Ok(())
 }
 

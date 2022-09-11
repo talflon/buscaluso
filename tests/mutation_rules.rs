@@ -11,7 +11,7 @@ impl<'a> SearchTracker<'a> {
         if self.past.contains(&word) {
             return true;
         }
-        while let Some((s, _c)) = self.future.by_ref().flatten().next() {
+        while let Some((s, _c)) = self.future.iter().by_ref().flatten().next() {
             self.past.push(s);
             if s == word {
                 return true;
@@ -21,7 +21,7 @@ impl<'a> SearchTracker<'a> {
     }
 
     fn all(&mut self) -> &[&'a str] {
-        while let Some((s, _c)) = self.future.by_ref().flatten().next() {
+        while let Some((s, _c)) = self.future.iter().by_ref().flatten().next() {
             self.past.push(s);
         }
         &self.past

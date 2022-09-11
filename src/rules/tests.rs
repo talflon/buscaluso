@@ -15,13 +15,14 @@ struct MockMutationRule<T> {
 impl<T: Clone> MutationRule for MockMutationRule<T> {
     type Alph = T;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         _word: &[Self::Alph],
         _word_idx: usize,
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
+        let result_buf = result_buf.as_mut();
         for result in &self.matches_at {
             result_buf.clear();
             result_buf.extend_from_slice(result);
@@ -29,12 +30,13 @@ impl<T: Clone> MutationRule for MockMutationRule<T> {
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+    fn for_each_match(
         &self,
         _word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
+        let result_buf = result_buf.as_mut();
         for (result, idx) in &self.matches {
             result_buf.clear();
             result_buf.extend_from_slice(result);
@@ -94,7 +96,11 @@ where
     M::Alph: Clone,
 {
     let mut results: Vec<(Vec<M::Alph>, usize)> = Vec::new();
-    matcher.for_each_match(word, |result, index| results.push((result.clone(), index)));
+    matcher.for_each_match(
+        word,
+        |result, index| results.push((result.clone(), index)),
+        Vec::new(),
+    );
     results
 }
 
@@ -104,7 +110,12 @@ where
     M::Alph: Clone,
 {
     let mut results: Vec<Vec<M::Alph>> = Vec::new();
-    matcher.for_each_match_at(word, index, |result| results.push(result.clone()));
+    matcher.for_each_match_at(
+        word,
+        index,
+        |result| results.push(result.clone()),
+        Vec::new(),
+    );
     results
 }
 
@@ -117,16 +128,20 @@ fn check_match_result_reasonable(
     assert_eq!(result_buf.len(), word.len());
     assert!(word_idx <= word.len() - pattern.len());
     assert_eq!(result_buf[0..word_idx], word[0..word_idx]);
-    assert!(!FonSet::seq_is_empty(result_buf));
+    assert!(!result_buf.is_empty_seq());
 }
 
 #[quickcheck]
 fn test_fonsetseq_for_each_match_fuzz(word: NonEmptyFonSetSeq, pattern: NonEmptyFonSetSeq) {
     let word = word.as_ref();
     let pattern = pattern.as_ref();
-    pattern.for_each_match(word, |result_buf, word_idx| {
-        check_match_result_reasonable(word, pattern, result_buf, word_idx);
-    });
+    pattern.for_each_match(
+        word,
+        |result_buf, word_idx| {
+            check_match_result_reasonable(word, pattern, result_buf, word_idx);
+        },
+        Vec::new(),
+    );
 }
 
 #[quickcheck]
@@ -137,9 +152,14 @@ fn test_fonsetseq_for_each_match_at_fuzz(
     let word_idx = word.index;
     let word = word.item.as_ref();
     let pattern = pattern.as_ref();
-    pattern.for_each_match_at(word, word_idx, |result_buf| {
-        check_match_result_reasonable(word, pattern, result_buf, word_idx);
-    });
+    pattern.for_each_match_at(
+        word,
+        word_idx,
+        |result_buf| {
+            check_match_result_reasonable(word, pattern, result_buf, word_idx);
+        },
+        Vec::new(),
+    );
 }
 
 #[test]

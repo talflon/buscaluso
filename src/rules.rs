@@ -15,7 +15,7 @@ pub fn create_replace_rule(
     pattern.extend_from_slice(lookbehind);
     pattern.extend_from_slice(old_pattern);
     pattern.extend_from_slice(lookahead);
-    if FonSet::seq_is_empty(&pattern) {
+    if pattern.is_empty_seq() {
         return Err(InvalidReplaceRule(format!(
             "pattern empty: {:?} | {:?} > {:?} | {:?}",
             lookbehind, old_pattern, new_pattern, lookahead,
@@ -120,45 +120,28 @@ pub fn add_replace_rules(
 pub trait MutationRule {
     type Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         word: &[Self::Alph],
         word_idx: usize,
-        action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        action: impl FnMut(&mut Vec<Self::Alph>),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     );
 
-    fn for_each_match_at<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match(
         &self,
         word: &[Self::Alph],
-        word_idx: usize,
-        action: F,
-    ) {
-        self.for_each_match_at_using(word, word_idx, action, &mut Vec::new());
-    }
-
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
-        &self,
-        word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         for word_idx in 0..=word.len() {
-            self.for_each_match_at_using(
+            self.for_each_match_at(
                 word,
                 word_idx,
                 |result_buf| action(result_buf, word_idx),
-                result_buf,
+                result_buf.as_mut(),
             );
         }
-    }
-
-    fn for_each_match<F: FnMut(&mut Vec<Self::Alph>, usize)>(
-        &self,
-        word: &[Self::Alph],
-        action: F,
-    ) {
-        self.for_each_match_using(word, action, &mut Vec::new());
     }
 }
 
@@ -212,14 +195,14 @@ where
 {
     type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         word: &[Self::Alph],
         word_idx: usize,
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
-        self.matcher.for_each_match_at_using(
+        self.matcher.for_each_match_at(
             word,
             word_idx,
             |result_buf| {
@@ -230,13 +213,13 @@ where
         );
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+    fn for_each_match(
         &self,
         word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
-        self.matcher.for_each_match_using(
+        self.matcher.for_each_match(
             word,
             |result_buf, word_idx| {
                 self.splice_into(word_idx, result_buf);
@@ -260,34 +243,34 @@ where
 impl<S: AsRef<[FonSet]>> MutationRule for S {
     type Alph = FonSet;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<FonSet>)>(
+    fn for_each_match_at(
         &self,
-        word: &[FonSet],
+        word: &[Self::Alph],
         word_idx: usize,
-        mut action: F,
-        result_buf: &mut Vec<FonSet>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         if self.as_ref().len() + word_idx <= word.len()
-            && FonSet::seq_match_at_into(self, word, word_idx, result_buf)
+            && self.match_at(word, word_idx, result_buf.as_mut())
         {
-            action(result_buf);
+            action(result_buf.as_mut())
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<FonSet>, usize)>(
+    fn for_each_match(
         &self,
-        word: &[FonSet],
-        mut action: F,
-        result_buf: &mut Vec<FonSet>,
+        word: &[Self::Alph],
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         let pattern = self.as_ref();
         let pattern_first = pattern[0];
         if pattern.len() <= word.len() {
             for word_idx in 0..=(word.len() - pattern.len()) {
                 if !(word[word_idx] & pattern_first).is_empty()
-                    && FonSet::seq_match_at_into(pattern, word, word_idx, result_buf)
+                    && self.match_at(word, word_idx, result_buf.as_mut())
                 {
-                    action(result_buf, word_idx);
+                    action(result_buf.as_mut(), word_idx);
                 }
             }
         }
@@ -306,27 +289,26 @@ pub struct StartAnchoredRule<M: MutationRule>(pub M);
 impl<M: MutationRule> MutationRule for StartAnchoredRule<M> {
     type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         word: &[Self::Alph],
         word_idx: usize,
-        action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        action: impl FnMut(&mut Vec<Self::Alph>),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         if word_idx == 0 {
-            self.0
-                .for_each_match_at_using(word, word_idx, action, result_buf);
+            self.0.for_each_match_at(word, word_idx, action, result_buf);
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+    fn for_each_match(
         &self,
         word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         self.0
-            .for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
+            .for_each_match_at(word, 0, |result_buf| action(result_buf, 0), result_buf);
     }
 }
 
@@ -345,27 +327,26 @@ pub struct EndAnchoredRule<M: FixedLenRule>(pub M);
 impl<M: FixedLenRule> MutationRule for EndAnchoredRule<M> {
     type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         word: &[Self::Alph],
         word_idx: usize,
-        action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        action: impl FnMut(&mut Vec<Self::Alph>),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         if word_idx + self.match_len() == word.len() {
-            self.0
-                .for_each_match_at_using(word, word_idx, action, result_buf);
+            self.0.for_each_match_at(word, word_idx, action, result_buf);
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+    fn for_each_match(
         &self,
         word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         if let Some(word_idx) = word.len().checked_sub(self.match_len()) {
-            self.0.for_each_match_at_using(
+            self.0.for_each_match_at(
                 word,
                 word_idx,
                 |result_buf| action(result_buf, word_idx),
@@ -390,28 +371,27 @@ pub struct BothAnchoredRule<M: FixedLenRule>(pub M);
 impl<M: FixedLenRule> MutationRule for BothAnchoredRule<M> {
     type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         word: &[Self::Alph],
         word_idx: usize,
-        action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        action: impl FnMut(&mut Vec<Self::Alph>),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         if word_idx == 0 && self.match_len() == word.len() {
-            self.0
-                .for_each_match_at_using(word, word_idx, action, result_buf);
+            self.0.for_each_match_at(word, word_idx, action, result_buf);
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+    fn for_each_match(
         &self,
         word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         if self.match_len() == word.len() {
             self.0
-                .for_each_match_at_using(word, 0, |result_buf| action(result_buf, 0), result_buf);
+                .for_each_match_at(word, 0, |result_buf| action(result_buf, 0), result_buf);
         }
     }
 }
@@ -469,46 +449,46 @@ impl<M: FixedLenRule> Default for ReplaceRuleSet<M> {
 impl<M: FixedLenRule> MutationRule for ReplaceRuleSet<M> {
     type Alph = M::Alph;
 
-    fn for_each_match_at_using<F: FnMut(&mut Vec<Self::Alph>)>(
+    fn for_each_match_at(
         &self,
         word: &[Self::Alph],
         word_idx: usize,
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         for rule in &self.any_rules {
-            rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+            rule.for_each_match_at(word, word_idx, &mut action, &mut result_buf);
         }
         for rule in &self.end_rules {
-            rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+            rule.for_each_match_at(word, word_idx, &mut action, &mut result_buf);
         }
         if word_idx == 0 {
             for rule in &self.start_rules {
-                rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+                rule.for_each_match_at(word, word_idx, &mut action, &mut result_buf);
             }
             for rule in &self.both_rules {
-                rule.for_each_match_at_using(word, word_idx, &mut action, result_buf);
+                rule.for_each_match_at(word, word_idx, &mut action, &mut result_buf);
             }
         }
     }
 
-    fn for_each_match_using<F: FnMut(&mut Vec<Self::Alph>, usize)>(
+    fn for_each_match(
         &self,
         word: &[Self::Alph],
-        mut action: F,
-        result_buf: &mut Vec<Self::Alph>,
+        mut action: impl FnMut(&mut Vec<Self::Alph>, usize),
+        mut result_buf: impl AsMut<Vec<Self::Alph>>,
     ) {
         for rule in &self.any_rules {
-            rule.for_each_match_using(word, &mut action, result_buf);
+            rule.for_each_match(word, &mut action, &mut result_buf);
         }
         for rule in &self.start_rules {
-            rule.for_each_match_using(word, &mut action, result_buf);
+            rule.for_each_match(word, &mut action, &mut result_buf);
         }
         for rule in &self.end_rules {
-            rule.for_each_match_using(word, &mut action, result_buf);
+            rule.for_each_match(word, &mut action, &mut result_buf);
         }
         for rule in &self.both_rules {
-            rule.for_each_match_using(word, &mut action, result_buf);
+            rule.for_each_match(word, &mut action, &mut result_buf);
         }
     }
 }

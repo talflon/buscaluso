@@ -52,7 +52,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(word) = cli.word {
-        for result in cfg.search(&word)?.flatten() {
+        for result in cfg.search(&word)?.iter().flatten() {
             let (word, cost) = result;
             println!("{} ({})", word, cost);
         }
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
             }
             line.clear();
             if let Some(ref mut iter) = iter {
-                if let Some((word, cost)) = iter.flatten().next() {
+                if let Some((word, cost)) = iter.iter().flatten().next() {
                     println!("{} ({})", word, cost);
                 } else if cli.verbose >= 2 {
                     println!("(done)");
