@@ -557,3 +557,26 @@ fn test_match_at_and_matches_at_same(seqs: (Vec<SmallFonSet>, Vec<SmallFonSet>))
     }
     TestResult::passed()
 }
+
+#[test]
+fn test_fonset_format_multiple() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let set = reg.set("blah")?;
+    assert_eq!(format!("{}", set.format(&reg)), "[blah]");
+    Ok(())
+}
+
+#[test]
+fn test_fonset_format_single() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let set = reg.set("q")?;
+    assert_eq!(format!("{}", set.format(&reg)), "q");
+    Ok(())
+}
+
+#[test]
+fn test_fonset_format_empty() -> Result<()> {
+    let reg = FonRegistry::new();
+    assert_eq!(format!("{}", FonSet::EMPTY.format(&reg)), "[]");
+    Ok(())
+}

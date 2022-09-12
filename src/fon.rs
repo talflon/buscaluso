@@ -1,7 +1,8 @@
 #[cfg(test)]
 pub mod tests;
 
-use std::{fmt::Debug, iter::FromIterator};
+use std::fmt::{Debug, Display, Write};
+use std::iter::FromIterator;
 
 use crate::*;
 
@@ -100,6 +101,13 @@ impl FonSet {
 
     pub fn is_subset_of(&self, other: FonSet) -> bool {
         (*self - other).is_empty()
+    }
+
+    pub fn format<'a>(&self, registry: &'a FonRegistry) -> FormattedFonSet<'a> {
+        FormattedFonSet {
+            fonset: *self,
+            registry,
+        }
     }
 }
 
@@ -271,6 +279,31 @@ impl<'a> FromIterator<&'a Fon> for FonSet {
             s |= i;
         }
         s
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FormattedFonSet<'a> {
+    fonset: FonSet,
+    registry: &'a FonRegistry,
+}
+
+impl<'a> Display for FormattedFonSet<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.fonset.len() == 1 {
+            f.write_char(
+                self.registry
+                    .get_fon_char(self.fonset.first_fon().unwrap())
+                    .map_err(|_| std::fmt::Error)?,
+            )?;
+        } else {
+            f.write_char('[')?;
+            for i in self.fonset {
+                f.write_char(self.registry.get_fon_char(i).map_err(|_| std::fmt::Error)?)?;
+            }
+            f.write_char(']')?;
+        }
+        Ok(())
     }
 }
 
