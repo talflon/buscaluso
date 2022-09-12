@@ -315,6 +315,7 @@ pub trait FonSetSeq: AsRef<[FonSet]> {
     fn match_at(&self, word: &[FonSet], word_idx: usize, result_buf: &mut Vec<FonSet>) -> bool;
     fn matches_at(&self, word: &[FonSet], word_idx: usize) -> bool;
     fn is_subset_of_seq(&self, other: &[FonSet]) -> bool;
+    fn format_seq<'a>(&'a self, registry: &'a FonRegistry) -> FormattedFonSetSeq<'a>;
 }
 
 impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
@@ -381,10 +382,34 @@ impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
                 .zip(other.iter())
                 .all(|(&us, &them)| us.is_subset_of(them))
     }
+
+    fn format_seq<'a>(&'a self, registry: &'a FonRegistry) -> FormattedFonSetSeq<'a> {
+        FormattedFonSetSeq {
+            seq: self.as_ref(),
+            registry,
+        }
+    }
 }
 
 pub fn fonsetseq_from_fonseq<F: AsRef<[Fon]>>(seq: F) -> Vec<FonSet> {
     Vec::from_iter(seq.as_ref().iter().cloned().map(FonSet::from))
+}
+
+#[derive(Debug, Clone)]
+pub struct FormattedFonSetSeq<'a> {
+    seq: &'a [FonSet],
+    registry: &'a FonRegistry,
+}
+
+impl<'a> Display for FormattedFonSetSeq<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_char('"')?;
+        for set in self.seq {
+            write!(f, "{}", set.format(self.registry))?;
+        }
+        f.write_char('"')?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]

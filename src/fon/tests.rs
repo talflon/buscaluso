@@ -580,3 +580,27 @@ fn test_fonset_format_empty() -> Result<()> {
     assert_eq!(format!("{}", FonSet::EMPTY.format(&reg)), "[]");
     Ok(())
 }
+
+#[test]
+fn test_fonset_format() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    assert_eq!(
+        format!("{}", reg.setseq(&["z"])?.format_seq(&reg)),
+        r#""z""#
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            reg.setseq(&["abc", "r", "def", "z"])?.format_seq(&reg)
+        ),
+        r#""[abc]r[def]z""#
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fonsetseq_format_empty() -> Result<()> {
+    let reg = FonRegistry::new();
+    assert_eq!(format!("{}", [].format_seq(&reg)), r#""""#);
+    Ok(())
+}
