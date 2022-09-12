@@ -345,7 +345,11 @@ impl<'a> Busca<'a> {
         if let Some(mut current_node) = self.nodes.pop() {
             self.cfg.mutation_rules.rules[current_node.cost_idx].for_each_match(
                 &*current_node.word,
-                |result, _| self.add_node(result, current_node.total_cost, fon_buffer),
+                |result, _| {
+                    if !result.is_subset_of_seq(&current_node.word) {
+                        self.add_node(result, current_node.total_cost, fon_buffer)
+                    }
+                },
                 fonset_buffer,
             );
             if current_node.inc_cost(self.cfg).is_some() {

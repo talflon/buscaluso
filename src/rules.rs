@@ -143,6 +143,8 @@ pub trait MutationRule {
             );
         }
     }
+
+    // fn matches_at(&self, word: &[Self::Alph], word_idx: usize) -> bool;
 }
 
 pub trait FixedLenRule
@@ -463,10 +465,10 @@ impl<M: FixedLenRule> MutationRule for ReplaceRuleSet<M> {
         }
         if word_idx == 0 {
             for rule in &self.start_rules {
-                rule.for_each_match_at(word, word_idx, &mut action, result_buf);
+                rule.for_each_match_at(word, 0, &mut action, result_buf);
             }
             for rule in &self.both_rules {
-                rule.for_each_match_at(word, word_idx, &mut action, result_buf);
+                rule.for_each_match_at(word, 0, &mut action, result_buf);
             }
         }
     }

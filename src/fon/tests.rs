@@ -1,6 +1,7 @@
 use super::*;
 use crate::tests::*;
 
+use std::cmp::min;
 use std::collections::BTreeSet;
 
 use quickcheck::{Arbitrary, QuickCheck, TestResult};
@@ -31,6 +32,10 @@ impl Arbitrary for SmallFonSet {
             bits: u16::arbitrary(g) as FonSetBitSet,
         })
     }
+}
+
+fn unwrap_small_seq(seq: impl AsRef<[SmallFonSet]>) -> Vec<FonSet> {
+    seq.as_ref().iter().map(|sfs| sfs.0).collect()
 }
 
 #[derive(Debug, Clone)]
@@ -259,6 +264,68 @@ fn test_fonset_subeq_fon(set: FonSet, fon: Fon) {
 }
 
 #[quickcheck]
+fn test_fonset_is_subset_of_self(set: FonSet) -> bool {
+    set.is_subset_of(set)
+}
+
+#[quickcheck]
+fn test_fonset_is_subset_of_same_as_contains_of_itered(set1: SmallFonSet, set2: SmallFonSet) {
+    let set1 = set1.0;
+    let set2 = set2.0;
+    assert_eq!(
+        set1.is_subset_of(set2),
+        set1.into_iter().all(|fon| set2.contains(fon))
+    );
+}
+
+#[quickcheck]
+fn test_fonset_is_subset_of(mut set1: FonSet, set2: FonSet) -> TestResult {
+    set1 |= set2;
+    if set1 == set2 {
+        return TestResult::discard();
+    }
+    assert!(set2.is_subset_of(set1));
+    assert!(!set1.is_subset_of(set2));
+    TestResult::passed()
+}
+
+#[quickcheck]
+fn test_fonsetseq_is_subset_of_seq_same_length(
+    seq1: Vec<SmallFonSet>,
+    seq2: Vec<SmallFonSet>,
+) -> TestResult {
+    let len = min(seq1.len(), seq2.len());
+    if len == 0 {
+        return TestResult::discard();
+    }
+    let seq1 = unwrap_small_seq(&seq1[..len]);
+    let seq2 = unwrap_small_seq(&seq2[..len]);
+    if seq1 == seq2 {
+        return TestResult::discard();
+    }
+    let unioned: Vec<FonSet> = seq1.iter().zip(seq2.iter()).map(|(&x, &y)| x | y).collect();
+    assert!(seq1.is_subset_of_seq(&unioned));
+    assert!(!unioned.is_subset_of_seq(&seq2));
+    TestResult::passed()
+}
+
+#[quickcheck]
+fn test_fonsetseq_is_subset_of_seq_different_length(seq: Vec<SmallFonSet>) -> TestResult {
+    if seq.is_empty() {
+        return TestResult::discard();
+    }
+    let seq = unwrap_small_seq(seq);
+    assert!(!seq.is_subset_of_seq(&seq[1..]));
+    assert!(!seq.is_subset_of_seq(&seq[..seq.len() - 1]));
+    TestResult::passed()
+}
+
+#[quickcheck]
+fn test_fonsetseq_is_subset_of_seq_self(seq: Vec<FonSet>) -> bool {
+    seq.is_subset_of_seq(&seq)
+}
+
+#[quickcheck]
 fn test_fonset_to_from_iter(fs: FonSet) {
     use std::collections::HashSet;
     let hs: HashSet<Fon> = fs.iter().collect();
@@ -466,4 +533,27 @@ fn test_fonset_seq_for_each_fon_seq_contains_samples() {
     QuickCheck::new()
         .gen(quickcheck::Gen::new(8))
         .quickcheck(fonset_seq_for_each_fon_seq_contains_samples as fn(_) -> TestResult);
+}
+
+#[quickcheck]
+fn test_match_at_and_matches_at_same(seqs: (Vec<SmallFonSet>, Vec<SmallFonSet>)) -> TestResult {
+    if seqs.0.is_empty() || seqs.1.is_empty() {
+        return TestResult::discard();
+    }
+    let (pattern, word) = if seqs.0.len() <= seqs.1.len() {
+        seqs
+    } else {
+        (seqs.1, seqs.0)
+    };
+    let pattern = unwrap_small_seq(pattern);
+    let word = unwrap_small_seq(word);
+    let mut result_buf = Vec::new();
+    for word_idx in 0..(word.len() - pattern.len()) {
+        let matched_at = pattern.match_at(&word, word_idx, &mut result_buf);
+        assert_eq!(matched_at, pattern.matches_at(&word, word_idx));
+        if matched_at {
+            assert!(pattern.matches_at(&result_buf, word_idx));
+        }
+    }
+    TestResult::passed()
 }

@@ -97,6 +97,10 @@ impl FonSet {
         }
         None
     }
+
+    pub fn is_subset_of(&self, other: FonSet) -> bool {
+        (*self - other).is_empty()
+    }
 }
 
 impl From<Fon> for FonSet {
@@ -276,6 +280,8 @@ pub trait FonSetSeq: AsRef<[FonSet]> {
     fn is_valid_seq(&self) -> bool;
     fn for_each_fon_seq(&self, buffer: &mut Vec<Fon>, action: impl FnMut(&[Fon]));
     fn match_at(&self, word: &[FonSet], word_idx: usize, result_buf: &mut Vec<FonSet>) -> bool;
+    fn matches_at(&self, word: &[FonSet], word_idx: usize) -> bool;
+    fn is_subset_of_seq(&self, other: &[FonSet]) -> bool;
 }
 
 impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
@@ -322,6 +328,25 @@ impl<S: AsRef<[FonSet]> + ?Sized> FonSetSeq for S {
             result_buf[word_idx + pattern_idx] &= pattern[pattern_idx];
         }
         !result_buf[word_idx..word_idx + pattern.len()].is_empty_seq()
+    }
+
+    fn matches_at(&self, word: &[FonSet], word_idx: usize) -> bool {
+        let pattern = self.as_ref();
+        pattern.len() + word_idx <= word.len()
+            && pattern
+                .iter()
+                .zip(word[word_idx..word_idx + pattern.len()].iter())
+                .all(|(&x, &y)| !(x & y).is_empty())
+    }
+
+    fn is_subset_of_seq(&self, other: &[FonSet]) -> bool {
+        let this = self.as_ref();
+        this.len() == other.len()
+            && self
+                .as_ref()
+                .iter()
+                .zip(other.iter())
+                .all(|(&us, &them)| us.is_subset_of(them))
     }
 }
 

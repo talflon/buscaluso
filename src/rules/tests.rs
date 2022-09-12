@@ -326,6 +326,23 @@ fn replace_rule_for_each_match_at_removes(
     }
 }
 
+#[test]
+fn replace_rule_finding_nothing_new() -> Result<()> {
+    let mut reg = FonRegistry::new();
+    let word = reg.setseq(&["abc", "def"])?;
+    let pattern = reg.setseq(&["ab", "cd"])?;
+    let rule = ReplaceRule {
+        matcher: pattern,
+        remove_idx: 1,
+        remove_len: 1,
+        replace_with: reg.setseq(&["ef"])?.into(),
+    };
+    let matches = collect_matches(&rule, &word);
+    assert_eq!(matches.len(), 1);
+    assert!(matches[0].0.is_subset_of_seq(&word));
+    Ok(())
+}
+
 #[quickcheck]
 fn test_replace_rule_set_for_each_match(matches: Vec<(Vec<FonId>, usize)>) -> bool {
     let rule = MockMutationRule {
