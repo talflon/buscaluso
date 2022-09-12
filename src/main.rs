@@ -52,28 +52,43 @@ fn main() -> Result<()> {
     }
 
     if let Some(word) = cli.word {
-        for result in cfg.search(&word)?.iter().flatten() {
-            let (word, cost) = result;
-            println!("{} ({})", word, cost);
+        let mut busca = cfg.search(&word)?;
+        let mut debugger = BuscaDebugger::new();
+        while let Some(result) = busca.iter().next() {
+            if let Some((word, cost)) = result {
+                println!("{} ({})", word, cost);
+            }
+            if cli.verbose >= 3 {
+                debugger.print_new_int_reps(&busca);
+            }
         }
     } else {
         // interactive mode
-        let mut iter: Option<Busca> = None;
+        let mut busca: Option<Busca> = None;
         let mut line = String::new();
+        let mut debugger: Option<BuscaDebugger> = None;
         while io::stdin().read_line(&mut line)? > 0 {
             let word = line.trim();
             if cli.verbose >= 2 {
                 eprintln!("{:?}", word);
             }
             if !word.is_empty() {
-                iter = Some(cfg.search(word)?);
+                busca = Some(cfg.search(word)?);
+                if cli.verbose >= 3 {
+                    debugger = Some(BuscaDebugger::new());
+                };
             }
             line.clear();
-            if let Some(ref mut iter) = iter {
-                if let Some((word, cost)) = iter.iter().flatten().next() {
+            if let Some(ref mut busca) = busca {
+                if let Some((word, cost)) = busca.iter().flatten().next() {
                     println!("{} ({})", word, cost);
                 } else if cli.verbose >= 2 {
                     println!("(done)");
+                }
+                if cli.verbose >= 3 {
+                    if let Some(ref mut debugger) = debugger {
+                        debugger.print_new_int_reps(busca);
+                    }
                 }
             }
         }

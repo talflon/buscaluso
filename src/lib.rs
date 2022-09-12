@@ -427,6 +427,33 @@ impl<'a, 'b> Iterator for BuscaIter<'a, 'b> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BuscaDebugger {
+    fonsetseq_already_seen: BTreeSet<Box<[FonSet]>>,
+}
+
+impl BuscaDebugger {
+    pub fn new() -> BuscaDebugger {
+        BuscaDebugger {
+            fonsetseq_already_seen: BTreeSet::new(),
+        }
+    }
+
+    pub fn print_new_int_reps<'b>(&mut self, busca: &Busca<'b>) {
+        for r in &busca.already_visited {
+            if self.fonsetseq_already_seen.insert(r.clone()) {
+                eprintln!("tried {}", r.format_seq(busca.cfg.fon_registry()));
+            }
+        }
+    }
+}
+
+impl Default for BuscaDebugger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn for_cartesian_product<T, S, F>(items: &[S], mut f: F) -> Result<()>
 where
     S: AsRef<[T]>,
