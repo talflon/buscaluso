@@ -305,7 +305,9 @@ fn test_fonsetseq_is_subset_of_seq_same_length(
     }
     let unioned: Vec<FonSet> = seq1.iter().zip(seq2.iter()).map(|(&x, &y)| x | y).collect();
     assert!(seq1.is_subset_of_seq(&unioned));
-    assert!(!unioned.is_subset_of_seq(&seq2));
+    assert!(seq2.is_subset_of_seq(&unioned));
+    assert!(unioned.is_subset_of_seq(&seq2) == seq1.is_subset_of_seq(&seq2));
+    assert!(unioned.is_subset_of_seq(&seq1) == seq2.is_subset_of_seq(&seq1));
     TestResult::passed()
 }
 
