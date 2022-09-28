@@ -1,10 +1,11 @@
 use std::io::prelude::*;
 
 use std::fs::File;
-use std::io;
 use std::io::BufReader;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::{io, process};
 
 use clap::Parser;
 
@@ -28,24 +29,6 @@ struct Cli {
     /// Turn on verbose output
     #[clap(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
-}
-
-fn next_within<T, I: Iterator<Item = Option<T>>>(
-    mut iter: I,
-    duration: Duration,
-) -> Option<Option<T>> {
-    let start_time = Instant::now();
-    loop {
-        match iter.next() {
-            result @ Some(Some(_)) => return result,
-            result @ Some(None) => {
-                if start_time.elapsed() > duration {
-                    return result;
-                }
-            }
-            None => return None,
-        }
-    }
 }
 
 fn main() -> Result<()> {
@@ -83,6 +66,20 @@ fn main() -> Result<()> {
         }
     } else {
         // interactive mode
+
+        let running = Arc::new(AtomicBool::new(false));
+        {
+            let running = Arc::clone(&running);
+            ctrlc::set_handler(move || {
+                println!();
+                if !running.swap(false, Ordering::SeqCst) {
+                    // force quit on second Ctrl-C without being cleared
+                    process::exit(1)
+                }
+            })
+            .unwrap();
+        }
+
         let mut busca: Option<Busca> = None;
         let mut line = String::new();
         let mut debugger: Option<BuscaDebugger> = None;
@@ -98,16 +95,30 @@ fn main() -> Result<()> {
                 };
             }
             line.clear();
+
             if let Some(ref mut busca) = busca {
-                match next_within(busca.iter(), Duration::from_secs(1)) {
-                    Some(Some((word, cost))) => println!("{} ({})", word, cost),
-                    Some(None) => println!("(thinking)"),
-                    None => {
-                        if cli.verbose >= 2 {
-                            println!("(done)");
+                running.store(true, Ordering::SeqCst);
+                loop {
+                    match busca.iter().next() {
+                        Some(Some((word, cost))) => {
+                            println!("{} ({})", word, cost);
+                            break;
+                        }
+                        Some(None) => {
+                            if !running.load(Ordering::SeqCst) {
+                                break;
+                            }
+                        }
+                        None => {
+                            if cli.verbose >= 2 {
+                                println!("(done)");
+                            }
+                            break;
                         }
                     }
                 }
+                running.store(false, Ordering::SeqCst);
+
                 if cli.verbose >= 3 {
                     if let Some(ref mut debugger) = debugger {
                         debugger.print_new_int_reps(busca);
