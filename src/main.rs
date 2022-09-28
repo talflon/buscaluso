@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 
@@ -27,6 +28,24 @@ struct Cli {
     /// Turn on verbose output
     #[clap(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
+}
+
+fn next_within<T, I: Iterator<Item = Option<T>>>(
+    mut iter: I,
+    duration: Duration,
+) -> Option<Option<T>> {
+    let start_time = Instant::now();
+    loop {
+        match iter.next() {
+            result @ Some(Some(_)) => return result,
+            result @ Some(None) => {
+                if start_time.elapsed() > duration {
+                    return result;
+                }
+            }
+            None => return None,
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -80,10 +99,14 @@ fn main() -> Result<()> {
             }
             line.clear();
             if let Some(ref mut busca) = busca {
-                if let Some((word, cost)) = busca.iter().flatten().next() {
-                    println!("{} ({})", word, cost);
-                } else if cli.verbose >= 2 {
-                    println!("(done)");
+                match next_within(busca.iter(), Duration::from_secs(1)) {
+                    Some(Some((word, cost))) => println!("{} ({})", word, cost),
+                    Some(None) => println!("(thinking)"),
+                    None => {
+                        if cli.verbose >= 2 {
+                            println!("(done)");
+                        }
+                    }
                 }
                 if cli.verbose >= 3 {
                     if let Some(ref mut debugger) = debugger {
