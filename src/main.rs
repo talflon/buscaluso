@@ -15,19 +15,18 @@ use buscaluso::*;
 #[clap(author, version, about, long_about = None)]
 struct Cli {
     /// Word to search for
-    #[clap(value_parser)]
     word: Option<String>,
 
     /// Rules file
-    #[clap(short, long, value_parser)]
+    #[arg(short, long)]
     rules: PathBuf,
 
     /// Dictionary file
-    #[clap(short, long, value_parser)]
+    #[arg(short, long)]
     dict: PathBuf,
 
     /// Turn on verbose output
-    #[clap(short, long, action = clap::ArgAction::Count)]
+    #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 }
 

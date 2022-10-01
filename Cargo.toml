@@ -10,7 +10,7 @@ edition = "2021"
 fons128 = []
 
 [dependencies]
-clap = { version = "3.2.16", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
 nom = "7.1.1"
 thiserror = "1.0"
 unicode-normalization = "0.1.21"
