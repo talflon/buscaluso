@@ -92,18 +92,18 @@ fn item(input: &str) -> IRes<Item> {
     ))(input)
 }
 
-fn item_seq<'a>(input: &'a str) -> IRes<ItemSeq<'a>> {
+fn item_seq(input: &str) -> IRes<ItemSeq> {
     separated_list1(space1, item)(input)
 }
 
-fn item_set<'a>(input: &'a str) -> IRes<ItemSet<'a>> {
+fn item_set(input: &str) -> IRes<ItemSet> {
     alt((
         delimited(char('['), separated_list1(space1, item), char(']')),
         map(item, |i| vec![i]),
     ))(input)
 }
 
-fn item_set_seq<'a>(input: &'a str) -> IRes<ItemSetSeq<'a>> {
+fn item_set_seq(input: &str) -> IRes<ItemSetSeq> {
     separated_list1(space1, item_set)(input)
 }
 
