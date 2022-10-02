@@ -1,9 +1,9 @@
 use quickcheck::{Arbitrary, TestResult};
 use quickcheck_macros::*;
 
-use super::*;
 use crate::fon::tests::*;
 use crate::tests::*;
+use crate::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 struct MockMutationRule<T> {

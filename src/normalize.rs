@@ -8,7 +8,8 @@ use std::fmt::Debug;
 
 use unicode_normalization::UnicodeNormalization;
 
-use crate::*;
+use crate::FonError::*;
+use crate::{Fon, FonRegistry, Result, NO_FON_CHAR};
 
 pub trait Normalizer {
     fn normalize_into(&self, word: &str, normalized: &mut Vec<Fon>) -> Result<()>;

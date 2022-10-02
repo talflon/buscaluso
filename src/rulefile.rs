@@ -1,5 +1,3 @@
-use super::*;
-
 use core::fmt;
 
 use nom::branch::alt;
@@ -9,6 +7,8 @@ use nom::combinator::{eof, map, map_res, opt, verify};
 use nom::multi::separated_list1;
 use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::IResult;
+
+use crate::Cost;
 
 #[cfg(test)]
 mod tests;

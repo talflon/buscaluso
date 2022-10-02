@@ -4,7 +4,8 @@ pub mod tests;
 use std::fmt::{Debug, Display, Write};
 use std::iter::FromIterator;
 
-use crate::*;
+use crate::FonError::*;
+use crate::Result;
 
 pub type FonId = u8;
 

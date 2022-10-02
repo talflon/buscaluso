@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use crate::*;
+use crate::FonError::*;
+use crate::{Cost, FonSet, FonSetSeq, Result, NO_FON};
 
 pub type MutRule = ReplaceRule<Box<[FonSet]>>;
 
