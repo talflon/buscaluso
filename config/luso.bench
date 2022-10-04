@@ -8,16 +8,20 @@ park = parque
 mas = mais
 ilya, ilia = ilha
 kel = aquele
-kes = aqueles
-izibi = exibir | exibe
+kes, kej = aqueles
+izibi = exibir | exibe | exibi
 el = ele
+ôbi, uvi = ouvir | ouve | ouvi
+própi, pópi, próp = próprio
+dixi, tchi = descer | desce | descei
+bibê, bébi = beber | bebe | bebei
 
 ; SV
 ijdá = ajudar | ajuda
 dzjná, desaginar, dzagenar = desasnar | desasna
 catxorr = cachorro
 kabóte = acabado
-drumi = dormir
+drumi = dormir | dorme | dormi
 rat = rádio
 rót = rato
 armá = arrumar | arruma
@@ -75,11 +79,14 @@ mamá = mamã
 buss = abuse, búzio
 bia = maria
 netxon = nelson
-nof = novo
+nof = novo, nove
 camin = caminho
 mossin = moçinho
 menin = menino
 tchá = deixar, chã
+oia = olhar
+viss, vice = vício
+tra = tirar | tira
 
 ; Praia
 dja, ya = já
@@ -107,16 +114,17 @@ môn = mão
 sôn = som
 fitcha = fechar | fecha
 kumpra = comprar | compra
-sinti = sentir | sente
+sinti = sentir | sente | senti
 bedju = velho
 nobu = novo
 mercanu = americano
 dodu = doido
-;djôbi = olhar | olha ?
 ôdja = olhar | olha
 ôdju = olho
 paraji = paragem
 calbicera = calabaceira
+undi = onde
+kuza = coisa
 
 ; PT
 bain = bem
@@ -127,7 +135,6 @@ gazej = gases
 i = e
 
 ; Guiné
-;djubi = olhar | olha ?
 dudu = doido
 
 ; Brazil
@@ -135,3 +142,4 @@ braziu = Brasil
 pódji = pode
 txia, tchia = tia
 tô = estou
+ikivalentxi = equivalente
