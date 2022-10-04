@@ -1,3 +1,5 @@
+mod benchfile;
+
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::BufRead;
@@ -8,8 +10,7 @@ use nom::Finish;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
-use crate::benchfile;
-use crate::{BuscaCfg, ParseErr};
+use buscaluso::{BuscaCfg, FonError::ParseErr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BenchResult {
@@ -56,7 +57,7 @@ impl Bencher {
             .or_default();
     }
 
-    pub fn load_benches<R: BufRead>(&mut self, input: R) -> crate::Result<()> {
+    pub fn load_benches<R: BufRead>(&mut self, input: R) -> buscaluso::Result<()> {
         for (line_no, line) in input.lines().enumerate() {
             match benchfile::bench_line(&line?).finish() {
                 Ok((_, Some((start_words, target_list)))) => {

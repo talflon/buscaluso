@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 
-use buscaluso::bench::Bencher;
 use buscaluso::*;
+use buscaluso_bench::*;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
