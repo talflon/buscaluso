@@ -1,3 +1,6 @@
+; Copyright © 2022 Daniel Getz
+; SPDX-License-Identifier: MIT
+
 ; aliases
 ; groups for all variants of a vowel
 A = [a á â ã]

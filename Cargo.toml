@@ -3,6 +3,7 @@ name = "buscaluso"
 version = "0.1.0"
 authors = ["Daniel Getz <dan@getzit.net>"]
 edition = "2021"
+license = "MIT"
 build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

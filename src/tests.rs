@@ -1,3 +1,6 @@
+// Copyright © 2022 Daniel Getz
+// SPDX-License-Identifier: MIT
+
 use super::fon::tests::*;
 use super::fon::*;
 use super::*;
