@@ -1,6 +1,27 @@
-[workspace]
+[package]
+name = "buscaluso"
+version = "0.1.0"
+authors = ["Daniel Getz <dan@getzit.net>"]
+edition = "2021"
+build = "build.rs"
 
-members = [
-    "buscaluso",
-    "buscaluso-bench",
-]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+fons128 = []
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+nom = "7.1"
+thiserror = "1.0"
+unicode-normalization = "0.1.21"
+ctrlc = "3.2"
+shadow-rs = "0.16"
+
+[dev-dependencies]
+quickcheck = "1.0"
+quickcheck_macros = "1"
+ntest = "0.8"
+
+[build-dependencies]
+shadow-rs = "0.16"
