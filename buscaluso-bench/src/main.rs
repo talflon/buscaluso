@@ -11,8 +11,10 @@ use clap::Parser;
 use buscaluso::*;
 use buscaluso_bench::*;
 
+shadow_rs::shadow!(build);
+
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, version, long_version = build::CLAP_LONG_VERSION, about, long_about = None)]
 struct Cli {
     /// Rules file
     #[arg(short, long)]

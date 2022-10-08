@@ -11,8 +11,10 @@ use clap::Parser;
 
 use buscaluso::*;
 
+shadow_rs::shadow!(build);
+
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, version, long_version = build::CLAP_LONG_VERSION, about, long_about = None)]
 struct Cli {
     /// Word to search for
     word: Option<String>,
