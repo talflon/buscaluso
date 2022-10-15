@@ -6,6 +6,8 @@ mod normalize;
 mod rulefile;
 mod rules;
 
+shadow_rs::shadow!(build);
+
 #[cfg(test)]
 mod tests;
 

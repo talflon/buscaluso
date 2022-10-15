@@ -1,6 +1,6 @@
 [package]
 name = "buscaluso"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Daniel Getz <dan@getzit.net>"]
 edition = "2021"
 license = "MIT"
@@ -26,3 +26,4 @@ ntest = "0.8"
 
 [build-dependencies]
 shadow-rs = "0.16"
+git2 = "0.15"

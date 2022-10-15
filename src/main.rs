@@ -12,12 +12,11 @@ use std::{io, process};
 
 use clap::Parser;
 
-use buscaluso::*;
-
-shadow_rs::shadow!(build);
+use buscaluso::build;
+use buscaluso::{Busca, BuscaCfg, BuscaDebugger, Result};
 
 #[derive(Parser)]
-#[clap(author, version, long_version = build::CLAP_LONG_VERSION, about, long_about = None)]
+#[clap(author, version = build::GIT_DESCRIBE, long_version = build::CLAP_LONG_VERSION, about, long_about = None)]
 struct Cli {
     /// Word to search for
     word: Option<String>,
