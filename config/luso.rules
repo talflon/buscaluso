@@ -10,11 +10,14 @@ O = [o ó ô õ]
 U = [u ũ ü]
 V = [A E I O U ɨ]  ; all vowels
 Vn = [ã ẽ ĩ õ ũ]  ; nasal vowels
-C = [b d f g k l m n p q r s t v x z ç š ž ʎ]  ; all consonants
+C = [b d f g k l ʎ m n ñ p q r s t v x z ç š ž ʎ]  ; all consonants
 Cs = [b d g k p q t]  ; stops
 Cv = [b d g v z ž]  ; voiced
 Cu = [f k p q t ç š]  ; unvoiced
 Cn = [m n ñ]  ; nasal consonants
+Cnn = [b d f g k l ʎ p q r s t v x z ç š ž ʎ]  ; non-nasal consonants
+Y = [ʎ i ɨ]
+Vends = [u ɨ e o]  ; possible silent end letter of word
 
 ; normalization
 l h > ʎ
@@ -22,6 +25,7 @@ n h > ñ
 c h > š
 p h > f
 h > _
+
 [ú ù û w] > u
 [î í ì ï y] > i
 ã o > ã u
@@ -31,14 +35,36 @@ h > _
 è > é
 ò > ó
 o u > ô
+
 s s > ç
-c i > ç i
-c e > ç e
-c c > k ç
-c > k
-g i > ž i
-g e > ž e
 j > ž
+
+c [î í ì ï y] > ç i
+c e > ç e
+c [é è] > ç é
+c ê > ç ê
+c ẽ > ç ẽ
+c c [î í ì ï y] > k ç i
+c c e > k ç e
+c c [é è] > k ç é
+c c ê > k ç ê
+c c ẽ > k ç ẽ
+c c > k
+c k > k
+c > k
+
+g [î í ì ï y] > ž i
+g e > ž e
+g [é è] > ž é
+g ê > ž ê
+g ẽ > ž ẽ
+g g [î í ì ï y] > g ž i
+g g e > g ž e
+g g [é è] > g ž é
+g g ê > g ž ê
+g g ẽ > g ž ẽ
+g g > g
+
 b b > b
 d d > d
 f f > f
@@ -57,74 +83,123 @@ v v > v
 ; mutations
 
 ; basic vowel
+
+; interpreting written vowels to more specific sounds
+; since they're ambiguous and context-dependent, these are mutation rules instead of normalization
 1: a > [á â]
 1: e > [é ê]
 1: o > [ô ó]
-;1: o u > ô
 1: o > u | _
 1: e > ɨ | _
-10: [C _] | ɨ > _ | C
-10: C | ɨ > _ | [C _]
 20: [i e] > ɨ
 20: o > u
+
+; vowel reduction
 30: u > ɨ
 40: â > ɨ
 100: [á é ê ó ô] > ɨ
 
+; syncope (elision)
+20: [C _] | ɨ > _ | C
+20: C | ɨ > _ | [C _]
+
 ; nasalization
-1: A Cn > ã | C
+; don't add Cn before another Cn
+1: A [m n] > ã | [V Cnn]
+; special case of written "am" at end of word being same as "ão"
 1: a m > ã u | _
-10: A Cn > ã | _
-1: E Cn > ẽ | [C _]
-1: I Cn > ĩ | [C _]
-1: O Cn > õ | [C _]
-1: U Cn > ũ | [C _]
+10: A m > ã | _
+30: A n > ã | _
+1: E m > ẽ | [Cnn _]
+10: E n > ẽ | [Cnn _]
+50: E m > ẽ | V
+1: I m > ĩ | [Cnn _]
+10: I n > ĩ | [Cnn _]
+50: I m > ĩ | V
+1: O m > õ | [Cnn _]
+10: O n > õ | [Cnn _]
+50: O m > õ | V
+1: U m > ũ | [Cnn _]
+10: U n > ũ | [Cnn _]
+50: U m > ũ | V
+; nasal assimilation
 50: Cn | [á â] > ã
 50: Cn | [é ê] > ẽ
 50: Cn | i > ĩ
 50: Cn | [ó ô] > õ
 50: Cn | u > ũ
 
+; denasalization
+100: ã > [á â]
+100: ẽ > [é ê]
+100: ĩ > i
+100: õ > [ó ô]
+100: ũ > u
+
 ; basic consonants
-1: x > š
-10: V | x > z | V
-10: x > k ç
+; interpreting sounds of letter "x"
+; since it's ambiguous and context-dependent, these are mutation rules instead of normalization
+10: x > š
+20: V | x > z | V
+30: [V r] | x > k ç
+30: [V r] | x > g z
+
+; interpreting single "s"
+; double "s" already handled by normalization
+; since single "s" is ambiguous and context-dependent, these are mutation rules instead of normalization
 1: s > š | [C _]
 1: V | s > z | V
-1: z > ž | [C _]
 1: [C _] | s > ç | V
+
+1: z > ž | [Cv _]
+
+; interpreting qu and gu
+; since they're ambiguous and context-dependent, these are mutation rules instead of normalization
+; the "w" sound is kept as "u"
 1: q ü > k u
-1: q u > k u | [A O]
-1: q u > k | [E I C _]
-2: q u > k u | [E I]
-1: g u > g | [E I C _]
+1: q u > k u | [A O C _]
+1: q u > k | [E I]
+5: q u > k u | [E I]
+1: g ü > g u
+5: g u > g | [E I]
 
 ; rhoticism
 50: V | r > _ | [C _]
+30: [á é ê i ô] | r > _ | _  ; SV verb endings
 
-; voicing matching
-30: Cv | p > b
-30: Cv | t > d
-30: Cv | k > g
-30: Cv | t š > d ž
-30: Cv | š > ž
-30: Cv | f > v
+; voicing matching in consonant clusters
+; since rules go both directions, we just need to allow for the voicing switch. no use focusing on going the right direction
+50: C | p > b
+50: p > b | C
+50: C | t > d
+50: t > d | C
+50: C | k > g
+50: k > g | C
+50: C | t š > d ž
+50: t š > d ž | C
+50: C | š > ž
+50: š > ž | C
+50: C | f > v
+50: f > v | C
 
 ; general pt-ish
-;50: o u > o i
-50: V | k > _ | [t ç]
-50: V | k > i | [t ç]
+50: [O E] | [i ɨ] > _ | [C _ A O]  ; "ou" ↔ "oi", "ei" ↔ "e"
+50: V | k > _ | [t ç]  ; as in pre-AO spelling of acção, PT vs BR acto / ato
+50: V | k > i | [t ç]  ; as in "feito" coming from "fecto"
 50: v > b
-50: i > d j | V
+50: Y > d ž | V  ; found in (at least) CV, Guiné, Spain
+50: [š s ç] > _ | Cs  ; as in "tô"
+50: V | [š s ç] > _ | _  ; as in "nô"
 
 ; Brazil
 50: t > t š | [ɨ i]
 50: d > d ž | [ɨ i]
-50: V | l > u | _
+50: V | l > u | [C _]
 
 ; similar sounds
-30: l i > ʎ
-30: n i > ñ
+5: l i > ʎ | [A E O U]
+5: n i > ñ | [A E O U]
+30: [š s] ç > š
 100: V | [l r t d] > [l r t d] | V
 100: Cn > Cn
 100: š > ç
@@ -132,26 +207,42 @@ v v > v
 500: Cs > Cs
 
 ; consonant cluster reduction
-100: C | C > _
+50: Cs > _ | Cs
+50: Cs l > š
+50: Cs l > t š
 
 ; CV
-50: ʎ > d ž
-50: _ | â > _ | C
+50: _ | â > _ | C  ; dropping unstressed initial "a" from PT words
+100: _ | _ > á | [V C]  ; adding an initial "a" to PT word
 30: ã u > õ
 30: â u > ô
-50: š > t š
-50: ž > d ž
+50: [_ V] | š > t š
+50: [_ V] | ž > d ž
+50: ñ > i n
+50: ʎ > i l
 
 ; SV
+; penultimate a -> ó
+50: [a á â] [d t] [o u] > ó t | _
+50: [a á â] [b p] [o u] > ó p | _
+50: [a á â] [g k] [o u] > ó k | _
+50: [a á â] r [o u] > ó r | _
+50: [a á â] l [o u] > ó l | _
+50: [a á â] n [o u] > ó n | _
+50: [a á â] [š ž] [o u] > ó t š | _
+50: [a á â] [š ž] [o u] > ó š | _
+; for cases we missed
+100: [a á â] > ó
+
 50: _ | m ɨ > á m | C
-50: [á â] [d t] [o u] > ó t | _
-50: [á â] [b p] [o u] > ó p | _
-50: [á â] [g k] [o u] > ó k | _
-50: [á â] r [o u] > ó r | _
-50: [á â] l [o u] > ó l | _
+
 50: u r > r u
-50: [á â ó] ʎ [o u] > ó i
-50: ô ʎ [o u] > ô i
+50: [á â ó] Y [o u] > ó i
+50: ó Y Vends > ó i
+50: ô Y Vends > ô i
+50: [á â ó] ñ [o u] > ó i n
+50: ó ñ Vends > ó i n
+50: ô ñ Vends > ô i n
 
 ; devoicing at end of word
 30: b > p | _
@@ -163,6 +254,5 @@ v v > v
 30: v > f | _
 
 ; dropping end of word
-10: C | [u ɨ] > _ | _
-20: C | i u > _ | _
-30: C | i k u > _ | _
+10: C | Vends > _ | _
+50: C | Y Vends > _ | _
