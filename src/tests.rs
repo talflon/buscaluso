@@ -493,3 +493,58 @@ fn test_busca_node_cmp() -> Result<()> {
     assert!(node2 <= node2);
     Ok(())
 }
+
+#[test]
+fn test_load_dictionary() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    for c in "abcdefghi".chars() {
+        cfg.fon_registry.add(c)?;
+    }
+    cfg.load_dictionary(
+        r#"
+        abc
+        def
+        ghi
+        "#
+        .as_bytes(),
+    )?;
+    for word in ["abc", "def", "ghi"] {
+        assert!(cfg
+            .dictionary
+            .words
+            .contains_key(cfg.fon_registry.normalize(word)?.as_slice()));
+    }
+    for word in ["ab", "afh"] {
+        assert!(!cfg
+            .dictionary
+            .words
+            .contains_key(cfg.fon_registry.normalize(word)?.as_slice()));
+    }
+    Ok(())
+}
+
+#[test]
+fn test_load_dictionary_skips_acronyms() -> Result<()> {
+    let mut cfg = BuscaCfg::new();
+    for c in "abcdefghi".chars() {
+        cfg.fon_registry.add(c)?;
+    }
+    cfg.load_dictionary(
+        r#"
+        abc
+        Def
+        GHI
+        adg
+        "#
+        .as_bytes(),
+    )?;
+    assert!(!cfg
+        .dictionary
+        .words
+        .contains_key(cfg.fon_registry.normalize("GHI")?.as_slice()));
+    assert!(cfg
+        .dictionary
+        .words
+        .contains_key(cfg.fon_registry.normalize("def")?.as_slice()));
+    Ok(())
+}

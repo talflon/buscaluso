@@ -251,8 +251,10 @@ impl BuscaCfg {
         let mut normalized = Vec::new();
         while input.read_line(&mut line)? > 0 {
             let word = line.trim();
-            self.normalize_into(word, &mut normalized)?;
-            self.dictionary.add_word(&normalized, word);
+            if word.chars().any(char::is_lowercase) {
+                self.normalize_into(word, &mut normalized)?;
+                self.dictionary.add_word(&normalized, word);
+            }
             line.clear();
             normalized.clear();
         }
