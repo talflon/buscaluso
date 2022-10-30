@@ -7,12 +7,12 @@ Built to be used with a Portuguese dictionary and words as heard from around the
 - Is there a Portuguese word with similar meaning and etymology to "txi"? *(descer)*
 - Could "tcheu" meaning *muito* have come from Portuguese? *(cheio)*
 - Sounds like "quat", but context seems to be art? *(quadro)*
-- How do you spell "ilya"? *(ilha)*
+- How do you spell "ilya" in Portuguese? *(ilha)* "ruspetu"? *(respeito)* "frí"? *(ferir)*
 - What did that speaker from Lisbon say that sounds like "bain"? *(bem)*
 - What did that speaker from northern Portugal say that sounds like "baka"? *(vaca)*
 - What did that speaker from Brazil say that sounds like "tchia"? *(tia)*
 
-This is currently under development, and not in good shape yet. Eventual goals:
+This is currently under development, and could use some more work. Eventual goals:
 - better performance
   - finding more appropriate words
   - finding words quicker
@@ -55,8 +55,8 @@ and returns matches from its dictionary.
 
 A rule file is a UTF-8 text file, with one rule per line.
 Comments start with a semicolon (`;`) and last until the end of the line.
-*Fons* are named as sequences of lowercase letters, unicode allowed.
-Most are single letters, but since they can have multiple letters, they must be separated from each other by whitespace.
+*Fons* are named as single lowercase letters, unicode allowed.
+They must be separated from each other by whitespace, in case they're expanded into allowing multi-letter fons in the future.
 There are three types of rules:
 
 ### Alias rules
