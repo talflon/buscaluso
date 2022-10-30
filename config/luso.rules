@@ -39,12 +39,12 @@ o u > ô
 s s > ç
 j > ž
 
-c [î í ì ï y] > ç i
+c [i î í ì ï y] > ç i
 c e > ç e
 c [é è] > ç é
 c ê > ç ê
 c ẽ > ç ẽ
-c c [î í ì ï y] > k ç i
+c c [i î í ì ï y] > k ç i
 c c e > k ç e
 c c [é è] > k ç é
 c c ê > k ç ê
@@ -53,12 +53,12 @@ c c > k
 c k > k
 c > k
 
-g [î í ì ï y] > ž i
+g [i î í ì ï y] > ž i
 g e > ž e
 g [é è] > ž é
 g ê > ž ê
 g ẽ > ž ẽ
-g g [î í ì ï y] > g ž i
+g g [i î í ì ï y] > g ž i
 g g e > g ž e
 g g [é è] > g ž é
 g g ê > g ž ê
@@ -183,13 +183,20 @@ v v > v
 50: f > v | C
 
 ; general pt-ish
-50: [O E] | [i ɨ] > _ | [C _ A O]  ; "ou" ↔ "oi", "ei" ↔ "e"
+; "ou" ↔ "oi", "ei" ↔ "e"; "ai" ↔ "a"
+50: O | [i ɨ] > _ | [C _ A]
+50: E | [i ɨ] > _ | [C _ A O]
+50: A | [i ɨ] > _ | [C _ O]
+
 50: V | k > _ | [t ç]  ; as in pre-AO spelling of acção, PT vs BR acto / ato
 50: V | k > i | [t ç]  ; as in "feito" coming from "fecto"
 50: v > b
 50: Y > d ž | V  ; found in (at least) CV, Guiné, Spain
 50: [š s ç] > _ | Cs  ; as in "tô"
 50: V | [š s ç] > _ | _  ; as in "nô"
+
+100: [e ɨ] | [l n] [e ɨ] > _ | C
+100: C V | [l n] > _ | V C
 
 ; Brazil
 50: t > t š | [ɨ i]
@@ -256,3 +263,4 @@ v v > v
 ; dropping end of word
 10: C | Vends > _ | _
 50: C | Y Vends > _ | _
+50: C | [r l] > _ | _
